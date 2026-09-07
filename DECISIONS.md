@@ -41,3 +41,13 @@ Consent records identify the subject profile, granting adult, and authority (`se
 At age 18 or later, the guardian may initiate conversion to a normal account. Verify age and the destination account's control, transfer ownership/authentication linkage atomically, and retain the same profile ID, history, consent provenance, and audit trail. Retire the mandatory guardian link; subsequent caregiver access uses the ordinary revocable sharing rules. Conversion is not automatic on the birthday.
 
 Reason: minors are supported through guardianship at launch, with a continuous health history when they become adults. The verifiable-parental-consent method requires legal review before launch; see OPEN_QUESTIONS.md.
+
+## D005 — Database authorization and reproducible verification
+
+Use Drizzle's generated schema migration and custom SQL migration for Auth triggers, RLS, grants, and audited operations, as required by PLAN.md. This takes precedence over the installed Supabase skill's generic CLI migration workflow.
+
+Patient-related IDs identify health profiles. Auth IDs identify actors. Direct Data API reads are limited to a patient's own profile/history. Doctor, caregiver, and guardian reads go through invoker wrappers calling checked functions in the unexposed `hms_private` schema; those functions enforce live identity, current consent and sharing scope and insert an audit row in the same transaction. Definer privileges are confined to those checked operations and Auth/constraint triggers. Account roles are stored in profiles, not taken from user-editable JWT metadata.
+
+Reproducibility tests apply the complete migrations to uniquely named temporary schemas on real Postgres, with the same grants, policies, and functions, and roll back schemas and synthetic Auth fixtures after each suite. CI uses PostgreSQL 17 with a minimal Auth SQL fixture for RLS tests; the separate live Auth browser test uses the supplied Supabase service and cleans up its synthetic account. `db:reset` is restricted to an explicitly authorised local database named `hms_test`.
+
+The live magic-link test generates a one-use token through the Supabase admin API without sending email, then exercises the actual browser confirmation, cookies, dependent creation, and sign-out. It verifies Auth/session behaviour but not inbox delivery or SMTP configuration.

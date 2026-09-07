@@ -11,3 +11,8 @@
 
 - No Git remote is configured in the supplied checkout.
 - The M0 workflow is configured for pushes and pull requests, and its quality commands passed locally. A hosted Actions run requires the founder's chosen repository remote and a push; no remote repository has been created or inferred.
+
+## OQ003 — Launch email delivery and redirect configuration
+
+- Live Supabase token redemption, browser sessions, and sign-out have been verified using a generated test link without emailing anyone.
+- Before launch, verify delivery to an authorised recipient and ensure the final app URL and auth callback are allowed in Supabase. The exact deployment URL is not available until deployment. No inbox-delivery claim is made by the token/session test.
