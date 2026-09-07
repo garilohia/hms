@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { z } from "zod";
 import { authenticatedClient } from "@/src/lib/auth/server";
 
@@ -11,6 +12,7 @@ export default async function AccountPage() {
   const profiles = profileList.parse(data);
   return <main className="mx-auto w-full max-w-lg space-y-6 p-6 py-16">
     <h1 className="text-3xl font-semibold">Your account</h1>
+    <Link href="/more/data" className="block underline">Devices &amp; data</Link>
     <ul className="space-y-3">{profiles.map(p => <li key={p.id} className="rounded-lg border p-4">{p.name}{p.kind === "dependent" && <span className="ml-2 text-sm">Dependent</span>}</li>)}</ul>
     <form method="post" action="/api/auth/sign-out"><button className="rounded-lg border px-4 py-2">Sign out</button></form>
   </main>;

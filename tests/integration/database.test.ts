@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { readFileSync, readdirSync } from "node:fs";
 import postgres from "postgres";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { normaliseApple } from "../../src/lib/ingestion/apple-normalise";
 
 if (!process.env.DATABASE_URL) throw new Error("DATABASE_URL is required for database verification.");
 const db = postgres(process.env.DATABASE_URL, { max: 1, prepare: false, connect_timeout: 10, onnotice() {} });
@@ -60,9 +61,9 @@ describe("real Postgres: migrations, authentication guard, RLS and audited acces
     if (cx) { await q("ROLLBACK"); cx.release(); }
     await db.end();
   });
-  it("migrates all 19 required/supporting tables from scratch with RLS", async () => {
+  it("migrates all 20 required/supporting tables from scratch with RLS", async () => {
     const tables=await q("select relname,relrowsecurity from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname=$1 and c.relkind='r'",[schema]);
-    expect(tables).toHaveLength(19);
+    expect(tables).toHaveLength(20);
     expect(tables.every(t => t.relrowsecurity)).toBe(true);
   });
   it("permits A to see their metric but B cannot read A's data", async () => {
@@ -147,5 +148,66 @@ describe("real Postgres: migrations, authentication guard, RLS and audited acces
   it("prevents clients from rewriting or deleting audit records", async () => {
     await actAs(actors.alice);
     await expect(q("delete from " + t("audit_log") + " where target_user_id=$1",[subjects.alice])).rejects.toMatchObject({code:"42501"});
+  });
+
+  async function connect(subject = subjects.alice) {
+    await q("select " + fn("record_consent") + "($1,'data_ingestion',true,'test',$2)",[subject,hash]);
+    const [row] = await q("select " + fn("connect_source") + "($1,'apple_health_export','Apple Health') as id",[subject]);
+    return row.id as string;
+  }
+  const batch = normaliseApple({ type: "HKQuantityTypeIdentifierHeartRate", value: "70", unit: "count/min", startDate: "2026-09-08 23:00:00 +0530", endDate: "2026-09-09 01:00:00 +0530", sourceName: "Sample watch" });
+  const ingest = (subject: string, sourceId: string, data: unknown = batch) => q("select " + fn("ingest_batch") + "($1,$2,$3::text::jsonb) as result", [subject, sourceId, JSON.stringify(data)]);
+  it("persists bounded metrics, keeps source IDs stable and deduplicates re-imports", async () => {
+    await actAs(actors.alice);
+    const id = await connect();
+    const [again] = await q("select " + fn("connect_source") + "($1,'apple_health_export','Apple Health') as id",[subjects.alice]);
+    expect(again.id).toBe(id);
+    expect((await ingest(subjects.alice,id))[0].result).toEqual({ inserted: 1, skipped: 0 });
+    expect((await ingest(subjects.alice,id))[0].result).toEqual({ inserted: 0, skipped: 1 });
+    expect((await ingest(subjects.alice,id,[{ ...batch[0], device: "Second sample watch" }]))[0].result.inserted).toBe(1);
+    await owner();
+    const jobs = await q("select day::text,revision from " + t("summary_jobs") + " where user_id=$1 order by day", [subjects.alice]);
+    expect(jobs.map(j => j.day)).toEqual(["2026-09-08", "2026-09-09"]);
+    expect(jobs.every(j => j.revision === 2)).toBe(true);
+    // Adapters only queue work; the existing summary is unchanged until M3.
+    expect((await q("select * from " + t("daily_summaries") + " where user_id=$1", [subjects.alice]))).toHaveLength(1);
+  });
+  it("requires ingestion consent even for the profile owner", async () => {
+    await actAs(actors.alice);
+    await expect(q("select " + fn("connect_source") + "($1,'generic_csv','CSV')",[subjects.alice])).rejects.toMatchObject({ code: "42501" });
+  });
+  it("stops later batches as soon as ingestion consent is withdrawn", async () => {
+    await actAs(actors.alice); const id = await connect();
+    await q("select " + fn("record_consent") + "($1,'data_ingestion',false,'test',$2)",[subjects.alice,hash]);
+    await expect(ingest(subjects.alice,id)).rejects.toMatchObject({ code: "42501" });
+  });
+  it("rejects another account's source even with consent on the target profile", async () => {
+    await actAs(actors.bob); await connect(subjects.bob);
+    await expect(ingest(subjects.bob,source)).rejects.toMatchObject({ code: "42501" });
+  });
+  it("lets a guardian import only into their dependent and audits the operation", async () => {
+    await actAs(actors.guardian);
+    const [p] = await q("select " + fn("create_dependent") + "('Sample child','2015-01-01','test',$1) as id",[hash]);
+    const id = await connect(p.id);
+    expect((await ingest(p.id,id))[0].result.inserted).toBe(1);
+    expect(await q("select * from " + t("metrics") + " where user_id=$1",[p.id])).toHaveLength(0);
+    await owner();
+    expect(await q("select * from " + t("audit_log") + " where target_user_id=$1 and action='guardian_ingest'",[p.id])).toHaveLength(1);
+    await actAs(actors.bob);
+    await expect(ingest(p.id,id)).rejects.toMatchObject({ code: "42501" });
+  });
+  it.each([
+    ["too many records", Array(1001).fill(batch[0])],
+    ["wrong units", [{ ...batch[0], unit: "kg" }]],
+    ["non-numeric value", [{ ...batch[0], value: "NaN" }]],
+    ["fractional duration", [{ ...batch[0], duration_s: 2.5 }]],
+    ["huge device name", [{ ...batch[0], device: "x".repeat(300) }]],
+  ])("rejects %s at the database boundary, bypassing the Next API", async (_name, invalid) => {
+    await actAs(actors.alice); const id = await connect();
+    await expect(ingest(subjects.alice,id,invalid)).rejects.toMatchObject({ code: "22023" });
+  });
+  it("does not expose the job queue directly to authenticated users", async () => {
+    await actAs(actors.alice);
+    await expect(q("select * from " + t("summary_jobs"))).rejects.toMatchObject({ code: "42501" });
   });
 });

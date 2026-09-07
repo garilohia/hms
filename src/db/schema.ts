@@ -35,8 +35,15 @@ export const consents = pgTable("consents", {
 
 export const dataSources = pgTable("data_sources", {
   id: id(), userId: patient(), provider: provider("provider").notNull(), status: text("status").default("connected").notNull(),
+  sourceKey: text("source_key").default(sql`gen_random_uuid()::text`).notNull(),
   lastSyncAt: at("last_sync_at"), metadata: json("metadata").default({}).notNull(), createdAt: created(),
-}, t => [index("sources_user_idx").on(t.userId), unique("sources_id_user_unique").on(t.id, t.userId)]).enableRLS();
+}, t => [index("sources_user_idx").on(t.userId), unique("sources_id_user_unique").on(t.id, t.userId), uniqueIndex("sources_stable_key").on(t.userId, t.provider, t.sourceKey)]).enableRLS();
+
+export const summaryJobs = pgTable("summary_jobs", {
+  id: id(), userId: patient(), day: date("day").notNull(), revision: integer("revision").default(1).notNull(),
+  processedRevision: integer("processed_revision").default(0).notNull(), availableAt: at("available_at").defaultNow().notNull(),
+  lockedUntil: at("locked_until"), leaseToken: uuid("lease_token"), attempts: integer("attempts").default(0).notNull(), lastError: text("last_error"),
+}, t => [uniqueIndex("summary_job_day").on(t.userId, t.day), index("summary_job_pending").on(t.availableAt).where(sql`${t.revision} > ${t.processedRevision}`)]).enableRLS();
 
 export const metrics = pgTable("metrics", {
   id: id(), userId: patient(), sourceId: uuid("source_id").notNull(), metricType: metricType("metric_type").notNull(),

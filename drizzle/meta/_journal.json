@@ -15,6 +15,20 @@
       "when": 1788820308457,
       "tag": "0001_auth_rls_audit",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1788821955333,
+      "tag": "0002_ingestion_jobs",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1788821956098,
+      "tag": "0003_ingestion_access",
+      "breakpoints": true
     }
   ]
 }

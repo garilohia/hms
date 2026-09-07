@@ -18,17 +18,21 @@
     "db:verify": "vitest run --config vitest.integration.config.mts",
     "auth:verify": "playwright test --config playwright.auth.config.ts",
     "db:advisors": "tsx scripts/db-advisors.ts",
-    "db:reset": "tsx scripts/reset-db.ts"
+    "db:reset": "tsx scripts/reset-db.ts",
+    "seed": "tsx scripts/seed.ts",
+    "ingestion:verify": "playwright test --config playwright.ingestion.config.ts"
   },
   "dependencies": {
     "@next/env": "16.3.4",
     "@supabase/ssr": "0.12.6",
     "@supabase/supabase-js": "2.116.0",
+    "@zip.js/zip.js": "2.11.4",
     "drizzle-orm": "0.45.2",
     "next": "16.3.4",
     "postgres": "3.4.9",
     "react": "19.2.8",
     "react-dom": "19.2.8",
+    "saxes": "6.0.0",
     "server-only": "0.0.1",
     "zod": "4.5.4"
   },

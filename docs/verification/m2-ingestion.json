@@ -1,0 +1,15 @@
+{
+  "fixture": {
+    "bytes": 220201254,
+    "records": 620285,
+    "distinct": 6000
+  },
+  "workers": 3,
+  "batches": 1243,
+  "maxBatchBytes": 260111,
+  "maxBatchRecords": 1000,
+  "memorySamples": 1562,
+  "peakRendererRssBytes": 256753664,
+  "memoryMeasurement": "Sum of all Chromium renderer RSS, sampled every 200 ms; includes page, dedicated worker and native memory, no baseline subtraction.",
+  "verifiedAt": "2026-09-07T23:21:52.425Z"
+}
