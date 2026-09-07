@@ -22,6 +22,12 @@ Use only the publishable key in public clients. `SUPABASE_SECRET_KEY`, `DATABASE
 
 Read PLAN.md and AGENTS.md before development. PROGRESS.md records verified milestones; DECISIONS.md records architecture choices and OPEN_QUESTIONS.md tracks unresolved dependencies. M0 provides tooling; later feature milestones are not complete until their recorded verification passes.
 
+## Analytics jobs
+
+`npm run summaries:recompute` drains durable pending summary work using bounded, retryable batches. `npm run summaries:verify` compares the three seeded profiles' stored summaries, scores, baselines and insights against fresh pure calculations. M4 adds the protected every-minute cron dispatcher; the CLI is the M3 verification path.
+
+Sample data covers the last 90 complete days in the selected profile's timezone. The version-2 seed correction regenerates only explicitly marked synthetic profiles with no uploads, documents, consults or manual cycle logs; it refuses to reset profiles containing such data. Missing readings remain missing. Scores require seven prior days of usable inputs. See D007 for formulas, source selection and cycle limitations.
+
 ## Database and authentication checks
 
 `npm run db:generate` generates Drizzle migrations; `npm run db:migrate` applies them using the private `DATABASE_URL`. `npm run db:verify` requires a real Postgres connection and verifies migration-from-scratch/RLS in a temporary schema inside a rolled-back transaction. `npm run db:advisors` runs Supabase's advisors. `npm run db:reset` refuses hosted databases: it requires an explicit local `hms_test` database and `HMS_ALLOW_DB_RESET=1`.

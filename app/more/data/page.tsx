@@ -9,7 +9,7 @@ export default async function DataPage() {
   if (!session) redirect("/sign-in");
   const { data, error } = await session.client.rpc("hms_list_profiles");
   if (error) throw new Error("We could not load your profiles.");
-  const profiles = z.array(z.object({ id: z.uuid(), name: z.string(), kind: z.enum(["self", "dependent"]) })).parse(data);
+  const profiles = z.array(z.object({ id: z.uuid(), name: z.string(), kind: z.enum(["self", "dependent"]), timezone: z.string() })).parse(data);
   return <main className="mx-auto max-w-xl space-y-6 px-5 py-10">
     <Link href="/account" className="underline">Your account</Link>
     <h1 className="text-3xl font-semibold">Devices &amp; data</h1>

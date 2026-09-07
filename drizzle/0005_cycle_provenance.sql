@@ -1,0 +1,2 @@
+ALTER TABLE "cycle_logs" ADD COLUMN "origin" text DEFAULT 'manual' NOT NULL;--> statement-breakpoint
+ALTER TABLE "cycle_logs" ADD CONSTRAINT "cycle_origin" CHECK ("cycle_logs"."origin" IN ('manual','import','inferred'));

@@ -20,7 +20,9 @@
     "db:advisors": "tsx scripts/db-advisors.ts",
     "db:reset": "tsx scripts/reset-db.ts",
     "seed": "tsx scripts/seed.ts",
-    "ingestion:verify": "playwright test --config playwright.ingestion.config.ts"
+    "ingestion:verify": "playwright test --config playwright.ingestion.config.ts",
+    "summaries:recompute": "tsx scripts/recompute.ts",
+    "summaries:verify": "tsx scripts/verify-summaries.ts"
   },
   "dependencies": {
     "@next/env": "16.3.4",

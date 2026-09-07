@@ -1,4 +1,5 @@
 import { BATCH_SIZE, canonicalMetric, units, type DataSource, type DataSourceAdapter, type IngestionTransport, type MetricType, type NormalisedMetric } from "./model";
+import { addDays, dayBounds, localDay } from "../analytics/time";
 
 export const personas = {
   a: { name: "Sample data · Arun, 34", age: 34, sex: "male" },
@@ -6,13 +7,14 @@ export const personas = {
   c: { name: "Sample data · Dev, 61", age: 61, sex: "male" },
 } as const;
 export type Persona = keyof typeof personas;
-export function* sampleMetrics(persona: Persona, seed = 42, endDay = new Date().toISOString().slice(0, 10)): Generator<NormalisedMetric> {
+export function* sampleMetrics(persona: Persona, seed = 42, endDay?: string, timezone = "UTC"): Generator<NormalisedMetric> {
   let state = seed >>> 0;
   const random = () => { state = (Math.imul(state, 1664525) + 1013904223) >>> 0; return state / 2 ** 32; };
-  const end = Date.parse(endDay + "T00:00:00Z");
-  if (!Number.isFinite(end)) throw new Error("A valid sample end day is required.");
+  // Generate complete local days, never future readings later on today's clock.
+  const end = endDay || addDays(localDay(Date.now(), timezone), -1);
+  dayBounds(end, timezone);
   for (let day = 0; day < 90; day++) {
-    const time = end - (89 - day) * 86400000;
+    const time = dayBounds(addDays(end, day - 89), timezone).start;
     const phase = day % 28;
     const luteal = persona === "b" && phase >= 15;
     const fever = persona === "c" && day >= 87;
@@ -48,7 +50,7 @@ export function* sampleMetrics(persona: Persona, seed = 42, endDay = new Date().
 
 export class SimulatorAdapter implements DataSourceAdapter {
   readonly provider = "simulator";
-  constructor(private transport: IngestionTransport, readonly persona: Persona = "a", readonly seed = 42, readonly endDay?: string) {}
+  constructor(private transport: IngestionTransport, readonly persona: Persona = "a", readonly seed = 42, readonly endDay?: string, readonly timezone = "UTC") {}
   connect(userId: string, _input: unknown) { void _input; return this.transport.connect(userId, this.provider, "Sample data · " + this.persona); }
   normalise(raw: unknown) { return canonicalMetric(raw); }
   async sync(source: DataSource) {
@@ -58,7 +60,7 @@ export class SimulatorAdapter implements DataSourceAdapter {
       const counts = await this.transport.persist(source, batch);
       result.inserted += counts.inserted; result.skipped += counts.skipped; batch = [];
     };
-    for (const raw of sampleMetrics(this.persona, this.seed, this.endDay)) {
+    for (const raw of sampleMetrics(this.persona, this.seed, this.endDay, this.timezone)) {
       batch.push(...this.normalise(raw));
       if (batch.length === BATCH_SIZE) await flush();
     }

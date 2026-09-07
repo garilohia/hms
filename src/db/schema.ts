@@ -63,11 +63,15 @@ export const dailySummaries = pgTable("daily_summaries", {
   sleepDurationMin: numeric("sleep_duration_min"), sleepEfficiency: numeric("sleep_efficiency"), deepMin: numeric("deep_min"), remMin: numeric("rem_min"),
   steps: numeric("steps"), activeCalories: numeric("active_calories"), stressAvg: numeric("stress_avg"),
   recoveryScore: numeric("recovery_score"), readinessScore: numeric("readiness_score"), computedAt: at("computed_at").defaultNow().notNull(),
+  skinTempAvg: numeric("skin_temp_avg"), nightSpo2Min: numeric("night_spo2_min"), weightKg: numeric("weight_kg"), bpSystolic: numeric("bp_systolic"), bpDiastolic: numeric("bp_diastolic"),
+  containsSample: boolean("contains_sample").default(false).notNull(), sourceIds: json("source_ids").default({}).notNull(),
+  metricValues: json("metric_values").default({}).notNull(), recoveryEvidence: json("recovery_evidence").default({}).notNull(),
 }, t => [uniqueIndex("summary_user_day").on(t.userId, t.day)]).enableRLS();
 
 export const baselines = pgTable("baselines", {
   id: id(), userId: patient(), metricType: metricType("metric_type").notNull(), median: numeric("median").notNull(),
   mad: numeric("mad").notNull(), sampleCount: integer("sample_count").notNull(), computedAt: at("computed_at").defaultNow().notNull(),
+  windowEnd: date("window_end"),
 }, t => [uniqueIndex("baseline_user_metric").on(t.userId, t.metricType), check("baseline_nonnegative", sql`${t.mad} >= 0 AND ${t.sampleCount} >= 0`)]).enableRLS();
 
 export const alertRules = pgTable("alert_rules", {
@@ -88,12 +92,14 @@ export const alerts = pgTable("alerts", {
 export const insights = pgTable("insights", {
   id: id(), userId: patient(), category: text("category").notNull(), title: text("title").notNull(), body: text("body").notNull(),
   evidence: json("evidence").notNull(), confidence: confidence("confidence").notNull(), createdAt: created(), dismissedAt: at("dismissed_at"),
-}, t => [index("insights_user_idx").on(t.userId, t.createdAt), check("insight_category", sql`${t.category} IN ('sleep','stress','recovery','cycle','activity','nutrition_ask_doctor')`)]).enableRLS();
+  insightKey: text("insight_key").default(sql`gen_random_uuid()::text`).notNull(), resolvedAt: at("resolved_at"),
+}, t => [index("insights_user_idx").on(t.userId, t.createdAt), uniqueIndex("insights_user_key").on(t.userId, t.insightKey), check("insight_category", sql`${t.category} IN ('sleep','stress','recovery','cycle','activity','nutrition_ask_doctor')`)]).enableRLS();
 
 export const cycleLogs = pgTable("cycle_logs", {
   id: id(), userId: patient(), day: date("day").notNull(), periodStart: date("period_start"), periodEnd: date("period_end"),
   phase: text("phase").default("unknown").notNull(), isInferred: boolean("is_inferred").default(false).notNull(), confidence: confidence("confidence").default("low").notNull(),
-}, t => [uniqueIndex("cycle_user_day").on(t.userId, t.day)]).enableRLS();
+  origin: text("origin").default("manual").notNull(),
+}, t => [uniqueIndex("cycle_user_day").on(t.userId, t.day), check("cycle_origin", sql`${t.origin} IN ('manual','import','inferred')`)]).enableRLS();
 
 export const doctors = pgTable("doctors", {
   id: uuid("id").primaryKey().references(() => profiles.id, { onDelete: "cascade" }), registrationNumber: text("registration_number").notNull(),

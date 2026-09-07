@@ -23,3 +23,11 @@
 - Fixed during verification: isolated Playwright output directories to prevent parallel suites deleting the import fixture; reset per-sync counters; bounded request deadlines/backoff and correct retryable service-error status. Early failed runs are not counted as passing evidence.
 - Remaining: M3–M8. No M3 implementation started before M2 verification passed.
 - Cut: none.
+
+## M3 — Analytics and durable recomputation
+
+- Built: pure baselines, sustained anomalies, local-day summaries, explainable recovery/readiness, anchored cycle estimates and every planned insight rule; persisted score evidence/source provenance; leased, retryable summary processing with seven-day coalescing, historical invalidation and atomic audit/completion; timezone-correct sample generation.
+- Verified: `npm run check` (73 tests); `npm run db:verify` (27 real Postgres tests, including historical score changes, stale leases, retries and withdrawn consent); `npm run db:migrate` applied migrations 0004–0005; `npm run seed` twice (zero new rows on both confirmation passes); `npm run summaries:recompute` (270 local-day jobs completed, zero failures); `npm run summaries:verify` (all 270 persisted days, baselines and insights match fresh calculations across 22,700 sample readings); `npm run build`; `HMS_TEST_PORT=3101 npm run e2e` (5); `HMS_TEST_PORT=3101 npm run auth:verify` (1); `npm run db:advisors` (no issues).
+- Sample results: 90 days and 13 populated baselines each; persona (b) has the cycle insight, persona (c) has strain/temperature insights; latest readiness scores are 100/100/55. No pending sample summary jobs remain.
+- Fixed during verification: qualified an ambiguous SQL sort; reduced per-day database round trips through bounded coalescing; regenerated only the versioned synthetic fixtures after detecting UTC samples spilling into a 91st local day. Their data are reproducible via the seed; uploaded data were not removed.
+- Cut: none. Every-minute dispatch remains M4; M3 verifies the durable processor through its CLI. M4 has not started before these gates passed.

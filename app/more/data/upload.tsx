@@ -5,7 +5,7 @@ import type { ImportRequest } from "@/src/lib/ingestion/import.worker";
 import { httpTransport } from "@/src/lib/ingestion/http";
 import { SimulatorAdapter, personas, type Persona } from "@/src/lib/ingestion/simulator";
 
-type Profile = { id: string; name: string; kind: "self" | "dependent" };
+type Profile = { id: string; name: string; kind: "self" | "dependent"; timezone: string };
 export function DataImport({ profiles }: { profiles: Profile[] }) {
   const [userId, setUserId] = useState(profiles[0]?.id || "");
   const [consent, setConsent] = useState(false);
@@ -32,7 +32,7 @@ export function DataImport({ profiles }: { profiles: Profile[] }) {
       if (!sample && (!file || !/\.(zip|csv)$/i.test(file.name))) throw new Error("Choose an Apple Health .zip or a .csv file.");
       await grantConsent();
       if (sample) {
-        const adapter = new SimulatorAdapter(httpTransport(abort.current.signal), persona);
+        const adapter = new SimulatorAdapter(httpTransport(abort.current.signal), persona, 42, undefined, selected?.timezone || "UTC");
         const source = await adapter.connect(userId, null);
         const result = await adapter.sync(source);
         setMessage("Sample data: " + result.inserted + " readings added; " + result.skipped + " duplicates skipped.");

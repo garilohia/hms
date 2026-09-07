@@ -3,6 +3,8 @@ import { readFileSync, readdirSync } from "node:fs";
 import postgres from "postgres";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { normaliseApple } from "../../src/lib/ingestion/apple-normalise";
+import { PostgresSummaryStore } from "../../src/lib/jobs/summary-store";
+import { runSummaryJobs } from "../../src/lib/jobs/summary-runner";
 
 if (!process.env.DATABASE_URL) throw new Error("DATABASE_URL is required for database verification.");
 const db = postgres(process.env.DATABASE_URL, { max: 1, prepare: false, connect_timeout: 10, onnotice() {} });
@@ -209,5 +211,63 @@ describe("real Postgres: migrations, authentication guard, RLS and audited acces
   it("does not expose the job queue directly to authenticated users", async () => {
     await actAs(actors.alice);
     await expect(q("select * from " + t("summary_jobs"))).rejects.toMatchObject({ code: "42501" });
+  });
+
+  function summaryStore() {
+    return new PostgresSummaryStore(cx, { schema, transaction: async work => {
+      const point = "job_" + randomUUID().replaceAll("-", "");
+      await q("SAVEPOINT " + point);
+      try { const result = await work(cx); await q("RELEASE SAVEPOINT " + point); return result; }
+      catch (error) { await q("ROLLBACK TO SAVEPOINT " + point); await q("RELEASE SAVEPOINT " + point); throw error; }
+    } });
+  }
+  const analyticsMetric = (day: number, metric_type: string, value: number, unit: string, hour = "06") => ({ metric_type, value, unit,
+    recorded_at: "2026-06-" + String(day).padStart(2, "0") + "T" + hour + ":00:00Z", duration_s: null, quality: "raw", external_id: null });
+  it("processes durable jobs into summaries/baselines and propagates historical corrections", async () => {
+    await q("delete from " + t("daily_summaries") + " where user_id=$1", [subjects.alice]);
+    await actAs(actors.alice); const id = await connect();
+    const data = Array.from({ length: 8 }, (_, i) => [analyticsMetric(i + 1, "resting_heart_rate", i === 7 ? 72 : 60, "bpm"), analyticsMetric(i + 1, "hrv_rmssd", 50, "ms"), analyticsMetric(i + 1, "sleep_duration", 480, "min"), analyticsMetric(i + 1, "skin_temperature", i === 7 ? 34.7 : 33.4, "°C")]).flat();
+    expect((await ingest(subjects.alice, id, data))[0].result.inserted).toBe(32);
+    await owner(); const store = summaryStore();
+    const firstJob = await store.claim(new Date());
+    expect(firstJob).not.toBeNull();
+    expect(await store.process(firstJob!, new Date())).toBe(7);
+    const result = await runSummaryJobs(store, { limit: 20, timeBudgetMs: 50000 });
+    expect(result).toEqual({ completed: 1, failed: 0, stale: 0, withheld: 0 });
+    let summaries = await q("select day::text,rhr::float,recovery_score::float,skin_temp_deviation::float from " + t("daily_summaries") + " where user_id=$1 order by day", [subjects.alice]);
+    expect(summaries).toHaveLength(8); expect(summaries[0].recovery_score).toBeNull(); expect(summaries[7].recovery_score).toBe(67);
+    expect(summaries[7].skin_temp_deviation).toBeCloseTo(1.3);
+    const [baseline] = await q("select median::float,sample_count from " + t("baselines") + " where user_id=$1 and metric_type='resting_heart_rate'", [subjects.alice]);
+    expect(baseline).toMatchObject({ median: 60, sample_count: 7 });
+    expect(await q("select * from " + t("audit_log") + " where target_user_id=$1 and action='system_summary_read'", [subjects.alice])).toHaveLength(8);
+    await actAs(actors.alice);
+    const historical = Array.from({ length: 7 }, (_, i) => analyticsMetric(i + 1, "resting_heart_rate", 120, "bpm", "08"));
+    expect((await ingest(subjects.alice, id, historical))[0].result.inserted).toBe(7);
+    await owner(); expect((await runSummaryJobs(store, { limit: 20, timeBudgetMs: 50000 })).completed).toBe(7);
+    summaries = await q("select day::text,recovery_score::float from " + t("daily_summaries") + " where user_id=$1 order by day", [subjects.alice]);
+    expect(summaries[7].recovery_score).toBe(100);
+    expect(await q("select * from " + t("summary_jobs") + " where user_id=$1 and revision>processed_revision", [subjects.alice])).toHaveLength(0);
+  }, 60000);
+  it("fences stale workers, withholds revoked-consent work and retries failures durably", async () => {
+    await actAs(actors.alice); const id = await connect();
+    await ingest(subjects.alice, id, [analyticsMetric(1, "resting_heart_rate", 60, "bpm")]);
+    await owner(); const store = summaryStore(); const clock = new Date(Date.now() + 1000);
+    const first = (await store.claim(clock))!;
+    expect(await store.claim(clock)).toBeNull();
+    const reclaimed = (await store.claim(new Date(clock.getTime() + 121000)))!;
+    expect(reclaimed.id).toBe(first.id); expect(reclaimed.token).not.toBe(first.token);
+    expect(await store.process(first, clock)).toBe("stale");
+    await q("update " + t("profiles") + " set timezone='Invalid/Timezone' where id=$1", [subjects.alice]);
+    await expect(store.process(reclaimed, clock)).rejects.toThrow();
+    await store.retry(reclaimed, clock, "RangeError");
+    expect(await store.claim(clock)).toBeNull();
+    const [state] = await q("select last_error,lease_token from " + t("summary_jobs") + " where id=$1", [reclaimed.id]);
+    expect(state).toMatchObject({ last_error: "RangeError", lease_token: null });
+    await q("update " + t("profiles") + " set timezone='UTC' where id=$1", [subjects.alice]);
+    const retry = (await store.claim(new Date(clock.getTime() + 241000)))!;
+    await q("update " + t("consents") + " set revoked_at=now() where user_id=$1 and consent_type='data_ingestion'", [subjects.alice]);
+    expect(await store.process(retry, clock)).toBe("withheld");
+    expect(await store.claim(new Date(clock.getTime() + 500000))).toBeNull();
+    expect(await q("select * from " + t("summary_jobs") + " where id=$1 and revision>processed_revision", [retry.id])).toHaveLength(1);
   });
 });
