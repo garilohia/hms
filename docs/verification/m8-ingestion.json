@@ -1,0 +1,34 @@
+{
+  "command": "HMS_TEST_PORT=3107 /usr/bin/caffeinate -i npm run ingestion:verify -- --repeat-each=2",
+  "result": "2 passed (36.7m)",
+  "runs": [
+    {
+      "fixture": { "bytes": 220201254, "records": 620285, "distinct": 6000 },
+      "passes": [
+        { "pass": 1, "durationMs": 559484, "inserted": 6000, "skipped": 614285 },
+        { "pass": 2, "durationMs": 555669, "inserted": 0, "skipped": 620285 }
+      ],
+      "workers": 3,
+      "batches": 1243,
+      "maxBatchBytes": 260111,
+      "maxBatchRecords": 1000,
+      "memorySamples": 5549,
+      "peakRendererRssBytes": 194609152,
+      "verifiedAt": "2026-09-08T11:09:31.369Z"
+    },
+    {
+      "fixture": { "bytes": 220201254, "records": 620285, "distinct": 6000 },
+      "passes": [
+        { "pass": 1, "durationMs": 528488, "inserted": 6000, "skipped": 614285 },
+        { "pass": 2, "durationMs": 532773, "inserted": 0, "skipped": 620285 }
+      ],
+      "workers": 3,
+      "batches": 1243,
+      "maxBatchBytes": 260111,
+      "maxBatchRecords": 1000,
+      "memorySamples": 5280,
+      "peakRendererRssBytes": 236044288,
+      "verifiedAt": "2026-09-08T11:27:21.926Z"
+    }
+  ]
+}

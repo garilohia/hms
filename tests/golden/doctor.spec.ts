@@ -4,6 +4,16 @@ import {createClient} from "@supabase/supabase-js";
 import postgres from "postgres";
 import {expect,test,type Page,type BrowserContext} from "@playwright/test";
 async function mobile(page:Page){expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBe(390);}
+async function loseFirstSavedResponse(page:Page,action:string) {
+  let lost=false;
+  await page.route("**/api/care",async route=>{
+    const input=route.request().postDataJSON();
+    if(!lost&&input.kind==="consult"&&input.action===action){
+      lost=true;const saved=await route.fetch();expect(saved.status()).toBe(200);
+      await route.abort("failed"); // The server committed, but the caller cannot tell.
+    }else await route.fallback();
+  });
+}
 for(const path of [3,4])test(path===3?"golden 3: summary-only doctor, real PDF and audited scope":"golden 4: request, acceptance, both messages and completed note in History",async({page,browser,baseURL},testInfo)=>{
   const {NEXT_PUBLIC_SUPABASE_URL:url,SUPABASE_SECRET_KEY:key,DATABASE_URL:database}=process.env;
   if(!url||!key||!database||!baseURL)throw new Error("Supabase test configuration required.");
@@ -40,16 +50,35 @@ for(const path of [3,4])test(path===3?"golden 3: summary-only doctor, real PDF a
       await writeFile(testInfo.outputPath("summary-only.pdf"),await doctorPdf.body());await doctorPage.screenshot({path:testInfo.outputPath("summary-only-mobile.png"),fullPage:true});
       expect((await doctorPage.request.post(baseURL+"/api/patient/view",{headers:{Origin:baseURL!},data:{userId:patient.subject,section:"raw"}})).status()).toBe(403);
       const response=await doctorPage.goto(baseURL+"/history?profile="+patient.subject);expect(response?.status()).toBe(404);
+      for(const query of ["patients=bad","patients="+patient.subject+"&patients="+patient.subject,"consults=%7B","consults=%7B%7D"]){
+        const invalid=await doctorPage.goto(baseURL+"/doctor?"+query);expect(invalid?.status()).toBe(404);
+        await expect(doctorPage.getByText("Application error",{exact:false})).toHaveCount(0);
+      }
+      const invalidCursor=await doctorPage.request.post(baseURL+"/api/care",{headers:{Origin:baseURL!},data:{kind:"consult_list",cursor:{}}});expect(invalidCursor.status()).toBe(400);
       const [audit]=await db.unsafe("select count(*)::int as n from public.audit_log where actor_id=$1 and target_user_id=$2 and action='clinical_summary_read'",[doctor.actor,patient.subject]);expect(audit.n).toBeGreaterThanOrEqual(2);
     }else{
+      await loseFirstSavedResponse(page,"request");
       const section=page.getByRole("heading",{name:"Your doctors",exact:true}).locator("..");await section.getByLabel("Optional note").fill("Sample trend question");await section.getByRole("button",{name:"Request review",exact:true}).click();
+      await expect(page.getByRole("status")).toContainText("Failed to fetch");await section.getByRole("button",{name:"Request review",exact:true}).click();
       await expect(page).toHaveURL(/\/consults\/[a-f0-9-]+$/);const consultUrl=page.url();
+      expect((await db.unsafe("select count(*)::int n from public.consults where patient_id=$1",[patient.subject]))[0].n).toBe(1);
       await doctorPage.goto(baseURL+"/doctor");await expect(doctorPage.getByRole("link",{name:label+" patient · trend review · requested",exact:true})).toBeVisible();await doctorPage.goto(consultUrl);
       await doctorPage.getByRole("button",{name:"Accept consult",exact:true}).click();await expect(doctorPage.getByLabel("Message",{exact:true})).toBeVisible();
       // Match the persisted message bubble, not the same text still in the composer.
-      await doctorPage.getByLabel("Message",{exact:true}).fill("Sample doctor message");await doctorPage.getByRole("button",{name:"Send message",exact:true}).click();await expect(doctorPage.locator(".message-row").getByText("Sample doctor message",{exact:true})).toBeVisible();
+      await loseFirstSavedResponse(doctorPage,"message");
+      await doctorPage.getByLabel("Message",{exact:true}).fill("Sample doctor message");await doctorPage.getByRole("button",{name:"Send message",exact:true}).click();
+      await expect(doctorPage.getByRole("status")).toContainText("Failed to fetch");await doctorPage.getByRole("button",{name:"Send message",exact:true}).click();
+      await expect(doctorPage.locator(".message-row").getByText("Sample doctor message",{exact:true})).toBeVisible();
       await page.getByRole("button",{name:"Refresh messages",exact:true}).click();await expect(page.locator(".message-row").getByText("Sample doctor message",{exact:true})).toBeVisible();
-      await page.getByLabel("Message",{exact:true}).fill("Sample patient reply");await page.getByRole("button",{name:"Send message",exact:true}).click();await expect(page.locator(".message-row").getByText("Sample patient reply",{exact:true})).toBeVisible();
+      let loseRefresh=false;
+      await page.route("**/api/care",async route=>{
+        const input=route.request().postDataJSON();
+        if(input.kind==="consult"&&input.action==="message")loseRefresh=true;
+        if(input.kind==="consult_read"&&loseRefresh){loseRefresh=false;await route.abort("failed");}else await route.fallback();
+      });
+      await page.getByLabel("Message",{exact:true}).fill("Sample patient reply");await page.getByRole("button",{name:"Send message",exact:true}).click();
+      await expect(page.getByRole("status")).toContainText("Saved, but the view could not refresh");await expect(page.getByLabel("Message",{exact:true})).toHaveValue("");
+      await page.getByRole("button",{name:"Refresh messages",exact:true}).click();await expect(page.locator(".message-row").getByText("Sample patient reply",{exact:true})).toBeVisible();
       await doctorPage.getByRole("button",{name:"Refresh messages",exact:true}).click();await expect(doctorPage.locator(".message-row").getByText("Sample patient reply",{exact:true})).toBeVisible();
       await doctorPage.getByLabel("Doctor note",{exact:true}).fill("Sample completed review note.");await doctorPage.getByRole("button",{name:"Close consult",exact:true}).click();await expect(doctorPage.getByText("Sample completed review note.",{exact:true})).toBeVisible();await mobile(doctorPage);
       await page.goto("/history");await expect(page.getByRole("heading",{name:"Consult notes",exact:true})).toBeVisible();await expect(page.getByText("Sample completed review note.",{exact:true})).toBeVisible();await mobile(page);await page.screenshot({path:testInfo.outputPath("completed-note-mobile.png"),fullPage:true});

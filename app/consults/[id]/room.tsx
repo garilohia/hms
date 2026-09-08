@@ -1,8 +1,10 @@
 "use client";
-import {useState,type FormEvent} from "react";
+import {useRef,useState,type FormEvent} from "react";
+import {RetryIds} from "@/src/lib/care/retry";
 import {z} from "zod";
 import {carePost,consultViewSchema} from "@/src/lib/care/model";
 export function ConsultRoom({initial,actor}:{initial:z.infer<typeof consultViewSchema>;actor:string}) {
+  const messageIds=useRef(new RetryIds());
   const [view,setView]=useState(initial),[busy,setBusy]=useState(false),[status,setStatus]=useState(""),[message,setMessage]=useState(""),[note,setNote]=useState("");
   const c=view.consult,open=c.status==="accepted"||c.status==="scheduled";
   async function refresh(earlier=false) {
@@ -10,9 +12,11 @@ export function ConsultRoom({initial,actor}:{initial:z.infer<typeof consultViewS
     catch(e){setStatus(e instanceof Error?e.message:"Consult unavailable.");}finally{setBusy(false);}
   }
   async function act(action:string,data:Record<string,unknown>={}) {
-    setBusy(true);setStatus("");try{await carePost({kind:"consult",userId:c.patient_id,action,data:{consultId:c.id,...data}});
-      setView(consultViewSchema.parse(await carePost({kind:"consult_read",id:c.id})));if(action==="message")setMessage("");setStatus("Saved.");}
-    catch(e){setStatus(e instanceof Error?e.message:"Could not save.");}finally{setBusy(false);}
+    let saved=false;
+    setBusy(true);setStatus("");try{await carePost({kind:"consult",userId:c.patient_id,action,data:{consultId:c.id,...data}});saved=true;
+      if(action==="message"){setMessage("");messageIds.current.confirmed(c.id);}
+      setView(consultViewSchema.parse(await carePost({kind:"consult_read",id:c.id})));setStatus("Saved.");}
+    catch(e){setStatus((e instanceof Error?e.message:"Could not save.")+(saved?" Saved, but the view could not refresh. Use Refresh messages.":" The change may have saved. Refresh to check, or retry an unchanged message."));}finally{setBusy(false);}
   }
   async function schedule(e:FormEvent<HTMLFormElement>){e.preventDefault();const data=new FormData(e.currentTarget);await act("schedule",{scheduledFor:new Date(String(data.get("time"))).toISOString(),callUrl:data.get("url")});}
   return <div className="stack"><section className="card stack"><h2>{view.patient_name} · {view.doctor_name}</h2><p>{c.type.replaceAll("_"," ")} · <strong>{c.status}</strong></p>
@@ -30,7 +34,7 @@ export function ConsultRoom({initial,actor}:{initial:z.infer<typeof consultViewS
   <section className="card stack"><h2>Messages</h2><button className="button secondary" disabled={busy} onClick={()=>refresh()}>Refresh messages</button>
     {view.messages.length?[...view.messages].reverse().map(m=><div key={m.id} className="message-row"><p className="muted">{m.sender_id===actor?"You":"Other participant"} · {m.sent_at.replace("T"," ")}</p><p style={{whiteSpace:"pre-wrap",overflowWrap:"anywhere"}}>{m.body}</p></div>):<p className="muted">No messages yet.</p>}
     {view.next_cursor&&<button className="button secondary" disabled={busy} onClick={()=>refresh(true)}>Earlier messages</button>}
-    {open?<form className="stack" onSubmit={e=>{e.preventDefault();void act("message",{body:message,messageId:crypto.randomUUID()});}}><label>Message<textarea required maxLength={4000} value={message} onChange={e=>setMessage(e.target.value)}/></label><button className="button" disabled={busy||!message.trim()}>Send message</button></form>:<p className="muted">Chat opens after acceptance and closes with the consult.</p>}
+    {open?<form className="stack" onSubmit={e=>{e.preventDefault();void act("message",{body:message,messageId:messageIds.current.id(c.id,message)});}}><label>Message<textarea required disabled={busy} maxLength={4000} value={message} onChange={e=>setMessage(e.target.value)}/></label><button className="button" disabled={busy||!message.trim()}>Send message</button></form>:<p className="muted">Chat opens after acceptance and closes with the consult.</p>}
   </section>
   {view.is_doctor&&open&&<section className="card stack"><h2>Close with a note</h2><label>Doctor note<textarea maxLength={10000} value={note} onChange={e=>setNote(e.target.value)}/></label><button className="button" disabled={busy||!note.trim()} onClick={()=>act("close",{note})}>Close consult</button></section>}
   {c.doctor_note&&<section className="card stack"><h2>Doctor note</h2><p style={{whiteSpace:"pre-wrap",overflowWrap:"anywhere"}}>{c.doctor_note}</p></section>}

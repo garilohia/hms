@@ -1,14 +1,15 @@
-import {z} from "zod";
+import {notFound} from "next/navigation";
+import {doctorQuerySchema} from "@/src/lib/care/cursors";
 import {ownedProfiles} from "@/src/lib/patient/server";
 import {careRead} from "@/src/lib/care/server";
 import {doctorAccountSchema,listSchema,patientLinkSchema,consultRowSchema} from "@/src/lib/care/model";
 import {AppFrame} from "../ui/frame";
 import {DoctorRegistration} from "./registration";
-export default async function DoctorPage({searchParams}:{searchParams:Promise<{patients?:string;consults?:string}>}) {
+export default async function DoctorPage({searchParams}:{searchParams:Promise<{patients?:string|string[];consults?:string|string[]}>}) {
   const {profiles}=await ownedProfiles(),params=await searchParams;
   const account=doctorAccountSchema.parse(await careRead({kind:"doctor",action:"read"}));
-  const patientCursor=params.patients?z.uuid().parse(params.patients):undefined;
-  const consultCursor=params.consults?z.record(z.string(),z.string()).parse(JSON.parse(params.consults)):undefined;
+  const query=doctorQuerySchema.safeParse(params);if(!query.success)notFound();
+  const patientCursor=query.data.patients,consultCursor=query.data.consults;
   const patients=account.doctor?.verified_at?listSchema(patientLinkSchema).parse(await careRead({kind:"list",section:"patients",cursor:patientCursor})):null;
   const consults=account.doctor?.verified_at?listSchema(consultRowSchema).parse(await careRead({kind:"consult_list",cursor:consultCursor})):null;
   return <AppFrame profile={profiles.find(p=>p.kind==="self")} profiles={profiles}><h1 className="page-title">Doctor portal</h1><div className="stack">

@@ -21,6 +21,7 @@ test("CSV round-trip and 210 MiB Apple ZIP in a browser worker, bounded memory a
   let peakRendererRssBytes = 0, memorySamples = 0, sampling = false, maxBatchBytes = 0, maxBatchRecords = 0, batches = 0, workers = 0;
   const browserErrors: string[] = [], memoryErrors: string[] = [];
   const requestErrors: { path: string; status?: number; error: string }[] = [];
+  const passes: { pass: number; durationMs: number; inserted: number; skipped: number }[] = [];
   const cdp = await browser.newBrowserCDPSession();
   try {
     page.on("pageerror", error => browserErrors.push(error.message));
@@ -79,12 +80,32 @@ test("CSV round-trip and 210 MiB Apple ZIP in a browser worker, bounded memory a
     await sampleMemory(); timer = setInterval(() => { void sampleMemory(); }, 200);
     for (let pass = 0; pass < 2; pass++) {
       await page.getByLabel("Health export").setInputFiles(fixturePath);
+      const started = Date.now(); let lastAdvance = started, lastCount = -1, nextReport = started;
       await page.getByRole("button", { name: "Import file", exact: true }).click();
-      await expect(progress).toHaveAttribute("data-status", /^(done|error|cancelled)$/, { timeout: 400_000 });
+      await expect(progress).toHaveAttribute("data-status", "working");
+      // M2 specifies correctness and bounded memory, not a WAN throughput target.
+      // Allow fifteen minutes per pass, but fail a stalled importer within two minutes.
+      // These are test-only limits; production request deadlines remain unchanged.
+      for (;;) {
+        const state = await progress.evaluate(element => ({ status: element.getAttribute("data-status"),
+          count: Number(element.getAttribute("data-inserted")) + Number(element.getAttribute("data-skipped")) }));
+        const now = Date.now();
+        if (state.count !== lastCount) { lastCount = state.count; lastAdvance = now; }
+        if (now >= nextReport) {
+          process.stdout.write(JSON.stringify({ benchmarkPass: pass + 1, processed: state.count, total: fixture.records, elapsedSeconds: Math.round((now - started) / 1000) }) + "\n");
+          nextReport = now + 60_000;
+        }
+        if (["done", "error", "cancelled"].includes(state.status || "")) break;
+        expect(now - started, "Import exceeded the fifteen-minute test limit").toBeLessThan(900_000);
+        expect(now - lastAdvance, "Import made no persisted progress for two minutes").toBeLessThan(120_000);
+        await page.waitForTimeout(1000);
+      }
       expect(await page.locator("main").innerText()).toContain("Import complete");
       await expect(progress).toHaveAttribute("data-status", "done");
       await expect(progress).toHaveAttribute("data-inserted", String(pass === 0 ? fixture.distinct : 0));
       await expect(progress).toHaveAttribute("data-skipped", String(fixture.records - (pass === 0 ? fixture.distinct : 0)));
+      const result = { pass: pass + 1, durationMs: Date.now() - started, inserted: pass === 0 ? fixture.distinct : 0, skipped: fixture.records - (pass === 0 ? fixture.distinct : 0) };
+      passes.push(result); process.stdout.write(JSON.stringify({ benchmarkPassComplete: result }) + "\n");
     }
     clearInterval(timer); timer = undefined;
     await sampleMemory();
@@ -95,7 +116,7 @@ test("CSV round-trip and 210 MiB Apple ZIP in a browser worker, bounded memory a
     expect(memorySamples).toBeGreaterThan(20); expect(memoryErrors).toEqual([]);
     expect(peakRendererRssBytes).toBeLessThanOrEqual(512 * 1024 * 1024);
     expect(browserErrors).toEqual([]);
-    const report = { fixture, workers, batches, maxBatchBytes, maxBatchRecords, memorySamples, peakRendererRssBytes, memoryMeasurement: "Sum of all Chromium renderer RSS, sampled every 200 ms; includes page, dedicated worker and native memory, no baseline subtraction.", verifiedAt: new Date().toISOString() };
+    const report = { fixture, passes, workers, batches, maxBatchBytes, maxBatchRecords, memorySamples, peakRendererRssBytes, memoryMeasurement: "Sum of all Chromium renderer RSS, sampled every 200 ms; includes page, dedicated worker and native memory, no baseline subtraction.", verifiedAt: new Date().toISOString() };
     await writeFile(info.outputPath("ingestion-report.json"), JSON.stringify(report, null, 2));
     await info.attach("ingestion-report", { body: JSON.stringify(report, null, 2), contentType: "application/json" });
   } finally {

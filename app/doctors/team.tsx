@@ -1,5 +1,6 @@
 "use client";
-import {useState,type FormEvent} from "react";
+import {useRef,useState,type FormEvent} from "react";
+import {RetryIds} from "@/src/lib/care/retry";
 import {z} from "zod";
 import {carePost,doctorSchema,linkSchema,listSchema,consultRowSchema} from "@/src/lib/care/model";
 import {patientPost} from "@/src/lib/patient/model";
@@ -7,6 +8,7 @@ type Directory=z.infer<ReturnType<typeof listSchema<typeof doctorSchema>>>;
 type Links=z.infer<ReturnType<typeof listSchema<typeof linkSchema>>>;
 type Consults=z.infer<ReturnType<typeof listSchema<typeof consultRowSchema>>>;
 export function DoctorTeam({userId,initialDirectory,initialLinks,initialConsults}:{userId:string;initialDirectory:Directory;initialLinks:Links;initialConsults:Consults}) {
+  const requestIds=useRef(new RetryIds());
   const [directory,setDirectory]=useState(initialDirectory),[links,setLinks]=useState(initialLinks),[consults,setConsults]=useState(initialConsults),[consent,setConsent]=useState(false),[busy,setBusy]=useState(false),[status,setStatus]=useState("");
   async function reload() {setLinks(listSchema(linkSchema).parse(await carePost({kind:"list",section:"doctors",userId})));setConsults(listSchema(consultRowSchema).parse(await carePost({kind:"consult_list",userId})));}
   async function link(event:FormEvent<HTMLFormElement>,doctorId:string) {
@@ -20,10 +22,12 @@ export function DoctorTeam({userId,initialDirectory,initialLinks,initialConsults
   async function revoke(linkId:string) {setBusy(true);setStatus("");try{await carePost({kind:"sharing",userId,action:"revoke_doctor",data:{linkId}});await reload();setStatus("Access revoked. Open consult requests with this doctor are cancelled.");}catch(e){setStatus(e instanceof Error?e.message:"Could not revoke.");}finally{setBusy(false);}}
   async function request(event:FormEvent<HTMLFormElement>,doctorId:string) {
     event.preventDefault();setBusy(true);setStatus("");const form=new FormData(event.currentTarget);
-    try {const id=z.uuid().parse(await carePost({kind:"consult",userId,action:"request",data:{doctorId,type:form.get("type"),note:form.get("note"),days:30,requestId:crypto.randomUUID()}}));
+    const data={doctorId,type:form.get("type"),note:form.get("note"),days:30};
+    const requestId=requestIds.current.id(userId+":"+doctorId,JSON.stringify(data));
+    try {const id=z.uuid().parse(await carePost({kind:"consult",userId,action:"request",data:{...data,requestId}}));
       // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- Full private navigation rechecks current access.
       window.location.href="/consults/"+id;}
-    catch(e){setStatus(e instanceof Error?e.message:"Request failed.");setBusy(false);}
+    catch(e){setStatus((e instanceof Error?e.message:"Request failed.")+" The request may have saved. Retry unchanged details, or check Consults before starting another request.");setBusy(false);}
   }
   async function next(section:"directory"|"doctors"|"consults") {setBusy(true);try{
     if(section==="directory")setDirectory(listSchema(doctorSchema).parse(await carePost({kind:"list",section,cursor:directory.next_cursor})));

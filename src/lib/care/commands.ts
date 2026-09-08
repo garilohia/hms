@@ -1,7 +1,7 @@
 import {z} from "zod";
+import {consultCursorSchema,messageCursorSchema} from "./cursors";
 const user={userId:z.uuid()};
 const data=z.record(z.string(),z.unknown());
-const cursor=z.record(z.string(),z.string().max(80)).nullable().optional();
 export const careCommand=z.discriminatedUnion("kind",[
   z.object({kind:z.literal("transfer_list"),cursor:z.uuid().nullable().optional()}),
   z.object({kind:z.literal("list"),section:z.enum(["directory","doctors","caregivers","incoming","patients"]),userId:z.uuid().optional(),cursor:z.uuid().nullable().optional()}),
@@ -10,8 +10,8 @@ export const careCommand=z.discriminatedUnion("kind",[
   z.object({kind:z.literal("summary"),...user,days:z.union([z.literal(30),z.literal(90)]).default(30),snapshotId:z.uuid().optional(),create:z.boolean().default(false)}),
   z.object({kind:z.literal("medications"),...user,items:z.array(z.string().trim().min(1).max(120)).max(12)}),
   z.object({kind:z.literal("consult"),...user,action:z.enum(["request","accept","schedule","message","close","cancel"]),data}),
-  z.object({kind:z.literal("consult_read"),id:z.uuid(),cursor}),
-  z.object({kind:z.literal("consult_list"),userId:z.uuid().optional(),cursor,history:z.boolean().default(false)}),
+  z.object({kind:z.literal("consult_read"),id:z.uuid(),cursor:messageCursorSchema.nullable().optional()}),
+  z.object({kind:z.literal("consult_list"),userId:z.uuid().optional(),cursor:consultCursorSchema.nullable().optional(),history:z.boolean().default(false)}),
 ]);
 export function careRpc(input:z.infer<typeof careCommand>) {
   switch(input.kind) {

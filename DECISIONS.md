@@ -157,3 +157,13 @@ The public comparison reads `device_catalog` through the existing publishable-ke
 ## D017 — M7 deployment fallback
 
 Vercel CLI 59.11.7 `whoami` reports logged out. Follow PLAN's build-only fallback; do not log in, create a temporary deployment/account or upload environment secrets. Verify the production build locally with the browser suites. A real Vercel deployment, final Auth redirect allowlist, environment configuration and minute scheduler activation remain founder setup, not a completed public deployment.
+
+## D018 — Uncertain clinical writes and bounded cursor validation
+
+Reuse a component-lifetime request/message UUID when retrying unchanged content after an uncertain response. The existing database operations already check the UUID and matching payload. Clear a message draft as soon as its write is confirmed, independently of the subsequent view refresh. Keep drafts and retry IDs in memory only; after reloading, check saved consults/messages before composing another request. Changed content is a new operation, not a silent overwrite of an already saved clinical entry.
+
+Validate doctor-portal URL cursors and care API cursors against complete UUID/timestamp shapes before database calls. Preserve Postgres microsecond timestamp strings. Malformed/repeated URL values render a controlled not-found page, and incomplete API cursors return a validation error instead of silently dropping a page or throwing a server error.
+
+## D019 — Progress-aware live import verification
+
+The large-file regression previously imposed an undocumented 400-second limit per import. M8 observed an otherwise error-free re-import still advancing at 570,000 of 620,285 records when that deadline expired; its measured memory peak was 235,601,920 bytes. PLAN's requirement is a ≥200 MiB streamed fixture, bounded batches, ≤512 MiB memory and exact deduplication, not a fixed remote-service throughput. Allow fifteen minutes per pass and a 35-minute test envelope for setup/cleanup, while retaining a stricter two-minute no-progress watchdog and minute-by-minute counters. The initial ten-minute allowance proved too short when an uninterrupted, progressing re-import reached 511,000/620,285 records before failing at 600,216 ms. Keep every byte, memory, record, worker and deduplication assertion, and all production request/retry deadlines unchanged. Timed-out runs remain failed evidence, not passes.

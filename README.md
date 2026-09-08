@@ -74,6 +74,8 @@ The same command seeds the fictional doctor directory and 20 dated device catalo
 
 `npm run build && npm run ingestion:verify` checks real CSV persistence and two imports of a generated 210 MiB XML ZIP, including API bounds, deduplication and a 512 MiB renderer-memory ceiling. It needs the supplied Supabase keys/database and Chromium on macOS or Linux (`ps` supplies RSS). Its temporary test account/data are cleaned up. Fixture ZIP and a JSON memory/count report are written under ignored `test-results/`. The sample personas created by `npm run seed` are intentionally retained.
 
+The live benchmark permits fifteen minutes per import, fails after two minutes without persisted progress, and prints progress once per minute (D019). Keep the test machine awake and connected. On macOS, `caffeinate -i npm run ingestion:verify` prevents idle sleep only while the command runs; keep the lid open. A sleep-interrupted test is not a valid memory or deduplication result.
+
 ## Documents, data rights and preview legal pages
 
 After migrations, run `npm run storage:setup` once. It creates the private `hms-documents` bucket only if absent and requires the restrictive Storage policy. Existing unexpected bucket settings are reported, not silently changed. History accepts PDF/JPEG/PNG originals up to 3 MiB through owner/guardian routes with ingestion consent. Reads require current owner/full-history permission and are audited. There are no public or durable signed document links.
