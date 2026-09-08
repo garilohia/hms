@@ -1,0 +1,63 @@
+import {randomUUID} from "node:crypto";
+import {writeFile} from "node:fs/promises";
+import {createClient} from "@supabase/supabase-js";
+import postgres from "postgres";
+import {expect,test,type Page,type BrowserContext} from "@playwright/test";
+async function mobile(page:Page){expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBe(390);}
+for(const path of [3,4])test(path===3?"golden 3: summary-only doctor, real PDF and audited scope":"golden 4: request, acceptance, both messages and completed note in History",async({page,browser,baseURL},testInfo)=>{
+  const {NEXT_PUBLIC_SUPABASE_URL:url,SUPABASE_SECRET_KEY:key,DATABASE_URL:database}=process.env;
+  if(!url||!key||!database||!baseURL)throw new Error("Supabase test configuration required.");
+  const admin=createClient(url,key,{auth:{persistSession:false,autoRefreshToken:false}}),db=postgres(database,{max:1,prepare:false});
+  const actors:string[]=[],subjects:string[]=[],errors:string[]=[];let doctorContext:BrowserContext|undefined;
+  const label="Sample care "+randomUUID().slice(0,8);
+  async function signIn(target:Page,name:string){target.on("pageerror",e=>errors.push(e.message));
+    const link=await admin.auth.admin.generateLink({type:"magiclink",email:"hms-care-"+randomUUID()+"@example.com",options:{data:{name,dob:"1990-01-01"}}});
+    if(link.error)throw new Error("Synthetic sign-in failed: "+link.error.code);actors.push(link.data.user.id);
+    const [p]=await db.unsafe("select id from public.profiles where auth_user_id=$1",[link.data.user.id]);subjects.push(p.id);
+    await db.unsafe("update public.profiles set onboarding_completed_at=now(),sex_at_birth='other' where id=$1",[p.id]);
+    await target.goto(baseURL+"/auth/confirm?next=/account&token_hash="+encodeURIComponent(link.data.properties.hashed_token));await expect(target.getByRole("heading",{name:"Your account"})).toBeVisible();
+    return {actor:link.data.user.id,subject:String(p.id)};
+  }
+  try {
+    const patient=await signIn(page,label+" patient");doctorContext=await browser.newContext({viewport:{width:390,height:844}});const doctorPage=await doctorContext.newPage();
+    const doctor=await signIn(doctorPage,label+" doctor");
+    await db.unsafe("update public.profiles set role='doctor' where id=$1",[doctor.subject]);
+    await db.unsafe("insert into public.doctors(id,registration_number,registering_council,specialities,languages,bio,consult_fee_inr,consult_fee_usd,available,verified_at,is_sample) values($1,$2,'Synthetic test council',array['General medicine'],array['English'],'Sample test practitioner',0,0,true,now(),true)",[doctor.subject,randomUUID()]);
+    await db.unsafe("insert into public.data_sources(user_id,provider,metadata) values($1,'simulator','{\"sample\":true}')",[patient.subject]);
+    await db.unsafe("insert into public.daily_summaries(user_id,day,rhr,hrv_avg,spo2_avg,sleep_duration_min,weight_kg,bp_systolic,bp_diastolic,contains_sample) select $1,current_date-n,60,40,97,420,70,120,80,true from generate_series(1,10) n",[patient.subject]);
+    await page.goto("/doctors");await page.getByLabel("I consent to sharing this profile",{exact:false}).check();
+    await page.getByRole("button",{name:"Link "+label+" doctor",exact:true}).click();
+    await expect(page.getByRole("status")).toHaveText("Doctor linked with your chosen scope.");await mobile(page);
+    if(path===3){
+      await page.getByRole("link",{name:"Your clinical summary",exact:true}).click();await page.getByRole("button",{name:"Save current summary snapshot",exact:true}).click();
+      await expect(page.getByRole("status")).toContainText("Snapshot saved.");
+      const download=await page.getByRole("link",{name:"Download clinical PDF",exact:true}).getAttribute("href");if(!download)throw new Error("PDF link missing.");expect(download).toContain("snapshot=");
+      const patientPdf=await page.request.get(download!);expect(patientPdf.status()).toBe(200);expect(patientPdf.headers()["content-type"]).toBe("application/pdf");expect((await patientPdf.body()).subarray(0,4).toString()).toBe("%PDF");
+      await doctorPage.goto(baseURL+"/doctor");await expect(doctorPage.getByRole("heading",{name:label+" patient",exact:true})).toBeVisible();
+      await expect(doctorPage.getByRole("link",{name:"Read-only History",exact:true})).toHaveCount(0);
+      await doctorPage.getByRole("link",{name:"Clinical summary",exact:true}).click();await expect(doctorPage.getByRole("heading",{name:"Clinical summary",exact:true})).toBeVisible();await mobile(doctorPage);
+      const doctorPdf=await doctorPage.request.get(baseURL+download);expect(doctorPdf.status()).toBe(200);expect(doctorPdf.headers()["cache-control"]).toContain("no-store");
+      await writeFile(testInfo.outputPath("summary-only.pdf"),await doctorPdf.body());await doctorPage.screenshot({path:testInfo.outputPath("summary-only-mobile.png"),fullPage:true});
+      expect((await doctorPage.request.post(baseURL+"/api/patient/view",{headers:{Origin:baseURL!},data:{userId:patient.subject,section:"raw"}})).status()).toBe(403);
+      const response=await doctorPage.goto(baseURL+"/history?profile="+patient.subject);expect(response?.status()).toBe(404);
+      const [audit]=await db.unsafe("select count(*)::int as n from public.audit_log where actor_id=$1 and target_user_id=$2 and action='clinical_summary_read'",[doctor.actor,patient.subject]);expect(audit.n).toBeGreaterThanOrEqual(2);
+    }else{
+      const section=page.getByRole("heading",{name:"Your doctors",exact:true}).locator("..");await section.getByLabel("Optional note").fill("Sample trend question");await section.getByRole("button",{name:"Request review",exact:true}).click();
+      await expect(page).toHaveURL(/\/consults\/[a-f0-9-]+$/);const consultUrl=page.url();
+      await doctorPage.goto(baseURL+"/doctor");await expect(doctorPage.getByRole("link",{name:label+" patient · trend review · requested",exact:true})).toBeVisible();await doctorPage.goto(consultUrl);
+      await doctorPage.getByRole("button",{name:"Accept consult",exact:true}).click();await expect(doctorPage.getByLabel("Message",{exact:true})).toBeVisible();
+      await doctorPage.getByLabel("Message",{exact:true}).fill("Sample doctor message");await doctorPage.getByRole("button",{name:"Send message",exact:true}).click();await expect(doctorPage.getByText("Sample doctor message",{exact:true})).toBeVisible();
+      await page.getByRole("button",{name:"Refresh messages",exact:true}).click();await expect(page.getByText("Sample doctor message",{exact:true})).toBeVisible();
+      await page.getByLabel("Message",{exact:true}).fill("Sample patient reply");await page.getByRole("button",{name:"Send message",exact:true}).click();await expect(page.getByText("Sample patient reply",{exact:true})).toBeVisible();
+      await doctorPage.getByRole("button",{name:"Refresh messages",exact:true}).click();await expect(doctorPage.getByText("Sample patient reply",{exact:true})).toBeVisible();
+      await doctorPage.getByLabel("Doctor note",{exact:true}).fill("Sample completed review note.");await doctorPage.getByRole("button",{name:"Close consult",exact:true}).click();await expect(doctorPage.getByText("Sample completed review note.",{exact:true})).toBeVisible();await mobile(doctorPage);
+      await page.goto("/history");await expect(page.getByRole("heading",{name:"Consult notes",exact:true})).toBeVisible();await expect(page.getByText("Sample completed review note.",{exact:true})).toBeVisible();await mobile(page);await page.screenshot({path:testInfo.outputPath("completed-note-mobile.png"),fullPage:true});
+      const [count]=await db.unsafe("select count(*)::int as n from public.messages where consult_id=$1",[consultUrl.split("/").at(-1)!]);expect(count.n).toBe(2);
+    }
+    expect(errors).toEqual([]);
+  }finally{
+    testInfo.setTimeout(testInfo.timeout+60000);await doctorContext?.close();
+    for(const actor of actors){const result=await admin.auth.admin.deleteUser(actor);if(result.error)throw new Error("Synthetic care actor cleanup failed.");}
+    if(actors.length)await db.unsafe("delete from public.audit_log where actor_id=any($1::uuid[]) or target_user_id=any($2::uuid[])",[actors,subjects]);await db.end();
+  }
+});

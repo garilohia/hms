@@ -1,0 +1,39 @@
+{
+  "milestone": "M6",
+  "verified_on": "2026-09-08",
+  "environment": "Local production Next.js build with live Supabase, synthetic fixtures only",
+  "unit_tests": 93,
+  "database_tests": 78,
+  "rls_tables": 22,
+  "migrations_through": "0018_adult_transfer_operations.sql",
+  "database_advisor_issues": 0,
+  "production_dependency_vulnerabilities": 0,
+  "production_routes": 39,
+  "golden_paths_passed_together": [1, 2, 3, 4, 6, 7],
+  "viewport_width": 390,
+  "anonymous_browser_tests": 6,
+  "live_auth_tests": 1,
+  "live_alert_tests": 1,
+  "sample_days_recomputed_comparison": 270,
+  "sample_metric_count": 22700,
+  "pdf": {
+    "renderer": "@react-pdf/renderer 4.9.0",
+    "one_page_fixtures": ["persona-a", "persona-b", "persona-c", "guardian-layout-stress", "wide-layout-stress", "unicode-layout"],
+    "all_rendered_pages_visually_inspected": true,
+    "actual_patient_and_doctor_downloads_verified": true,
+    "actual_guardian_pdf_flag_verified": true,
+    "listed_medications_preserved": true,
+    "unsupported_glyphs_fail_explicitly": true,
+    "fonts_in_production_dependency_trace": true
+  },
+  "guardian_conversion": {
+    "before_18_rejected": true,
+    "controlled_clock_private_to_database_owner": true,
+    "history_and_consent_provenance_preserved": true,
+    "mandatory_guardian_authority_retired": true,
+    "production_offer_accept_ui_verified_with_synthetic_adult_fixture": true,
+    "established_recipient_replacement_rejected_atomically": true
+  },
+  "notification_evidence": "Actual console-stub transport, synthetic data and persisted stubbed outbox status; no real inbox delivery claimed",
+  "scope": "No remote CI, physical-phone, deployed-scheduler, real-practitioner or legal-verification claim. See OPEN_QUESTIONS.md."
+}

@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
-import { loadEnvConfig } from "@next/env";
+import nextEnv from "@next/env";
 import postgres from "postgres";
 import { dailySummary, deriveHistory, periodsFromFlows, type Metric } from "../src/lib/analytics";
 import { localDay } from "../src/lib/analytics/time";
 
-loadEnvConfig(process.cwd());
+nextEnv.loadEnvConfig(process.cwd());
 async function main() {
   if (!process.env.DATABASE_URL) throw new Error("DATABASE_URL is required.");
   const db = postgres(process.env.DATABASE_URL, { max: 1, prepare: false });

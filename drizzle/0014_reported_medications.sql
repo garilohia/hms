@@ -1,0 +1,1 @@
+ALTER TABLE "profiles" ADD COLUMN "medications" text[] DEFAULT '{}' NOT NULL;

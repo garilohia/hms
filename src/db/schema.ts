@@ -25,6 +25,7 @@ export const profiles = pgTable("profiles", {
   localEmergencyNumber: text("local_emergency_number").default("112").notNull(),
   role: profileRole("role").default("patient").notNull(), createdAt: created(),
   onboardingCompletedAt: at("onboarding_completed_at"), cycleTrackingEnabled: boolean("cycle_tracking_enabled").default(false).notNull(),
+  medications: text("medications").array().default([]).notNull(),
 }, t => [index("profiles_owner_idx").on(t.ownerAccountId), check("profiles_identity_kind", sql`(${t.kind} = 'self' AND ${t.authUserId} IS NOT NULL AND ${t.ownerAccountId} = ${t.authUserId}) OR (${t.kind} = 'dependent' AND ${t.authUserId} IS NULL AND ${t.role} = 'patient')`)]).enableRLS();
 
 const patient = () => uuid("user_id").notNull().references(() => profiles.id, { onDelete: "cascade" });
@@ -125,6 +126,7 @@ export const doctors = pgTable("doctors", {
   registeringCouncil: text("registering_council").notNull(), specialities: text("specialities").array().notNull(), languages: text("languages").array().notNull(),
   bio: text("bio").notNull(), consultFeeInr: numeric("consult_fee_inr").notNull(), consultFeeUsd: numeric("consult_fee_usd").notNull(),
   available: boolean("available").default(false).notNull(), verifiedAt: at("verified_at"),
+  isSample: boolean("is_sample").default(false).notNull(),
 }, t => [uniqueIndex("doctor_registration").on(t.registrationNumber, t.registeringCouncil)]).enableRLS();
 
 export const doctorPatientLinks = pgTable("doctor_patient_links", {
@@ -148,6 +150,13 @@ export const caregiverLinks = pgTable("caregiver_links", {
 export const summarySnapshots = pgTable("summary_snapshots", {
   id: id(), userId: patient(), body: json("body").notNull(), createdAt: created(),
 }, t => [index("snapshots_user_idx").on(t.userId)]).enableRLS();
+
+export const profileTransfers = pgTable("profile_transfers", {
+  id:id(), userId:patient(), guardianAccountId:uuid("guardian_account_id").notNull(),
+  recipientAccountId:uuid("recipient_account_id").notNull(), createdAt:created(), expiresAt:at("expires_at").notNull(),
+  acceptedAt:at("accepted_at"), revokedAt:at("revoked_at"),
+}, t=>[index("transfer_recipient_idx").on(t.recipientAccountId),index("transfer_guardian_idx").on(t.guardianAccountId),
+  uniqueIndex("transfer_pending_subject").on(t.userId).where(sql`${t.acceptedAt} IS NULL AND ${t.revokedAt} IS NULL`)]).enableRLS();
 
 export const consults = pgTable("consults", {
   id: id(), patientId: uuid("patient_id").notNull().references(() => profiles.id, { onDelete: "cascade" }),

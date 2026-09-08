@@ -1,6 +1,6 @@
-import { loadEnvConfig } from "@next/env";
+import { existsSync } from "node:fs";
 import { defineConfig } from "drizzle-kit";
-loadEnvConfig(process.cwd());
+if (existsSync(".env.local")) process.loadEnvFile(".env.local");
 export default defineConfig({
   dialect: "postgresql",
   schema: "./src/db/schema.ts",

@@ -1,12 +1,12 @@
 import { randomUUID } from "node:crypto";
-import { loadEnvConfig } from "@next/env";
+import nextEnv from "@next/env";
 import { createClient } from "@supabase/supabase-js";
 import postgres from "postgres";
 import { z } from "zod";
 import { SimulatorAdapter, personas, type Persona } from "../src/lib/ingestion/simulator";
 import type { IngestionTransport } from "../src/lib/ingestion/model";
 
-loadEnvConfig(process.cwd());
+nextEnv.loadEnvConfig(process.cwd());
 async function main() {
   const env = z.object({ DATABASE_URL: z.string(), NEXT_PUBLIC_SUPABASE_URL: z.url(), SUPABASE_SECRET_KEY: z.string() }).parse(process.env);
   const db = postgres(env.DATABASE_URL, { max: 1, prepare: false });

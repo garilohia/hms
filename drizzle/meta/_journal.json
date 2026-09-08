@@ -85,6 +85,55 @@
       "when": 1788827921423,
       "tag": "0011_source_provenance",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1788835000123,
+      "tag": "0012_doctor_sample_label",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1788835000838,
+      "tag": "0013_care_team_operations",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1788835208402,
+      "tag": "0014_reported_medications",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1788835208941,
+      "tag": "0015_clinical_consults",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1788836062851,
+      "tag": "0016_care_consent_guard",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1788836501898,
+      "tag": "0017_adult_profile_transfers",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1788836502570,
+      "tag": "0018_adult_transfer_operations",
+      "breakpoints": true
     }
   ]
 }

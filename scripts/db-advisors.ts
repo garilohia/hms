@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
-import { loadEnvConfig } from "@next/env";
-loadEnvConfig(process.cwd());
+import nextEnv from "@next/env";
+nextEnv.loadEnvConfig(process.cwd());
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error("DATABASE_URL is required.");
 const password = new URL(url).password;

@@ -1,0 +1,1 @@
+ALTER TABLE "doctors" ADD COLUMN "is_sample" boolean DEFAULT false NOT NULL;

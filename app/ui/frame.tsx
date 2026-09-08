@@ -9,6 +9,7 @@ export function AppFrame({children,profile,profiles=[]}:{children:ReactNode;prof
   return <div className="app-frame">
     <header className="app-header"><a className="app-brand" href={"/today"+suffix}>HMS</a><a href={"/more"+suffix}>More</a>
       {profile && <div className="profile-control">{profiles.length>1?<label>Viewing profile<select aria-label="Viewing profile" value={profile.id} onChange={e=>{window.location.href=path+"?profile="+e.target.value;}}>
+        {!profiles.some(p=>p.id===profile.id)&&<option value={profile.id}>{profile.name} · Shared, read-only</option>}
         {profiles.map(p=><option key={p.id} value={p.id}>{p.name}{p.kind==="dependent"?" · Dependent":""}</option>)}
       </select></label>:<span>{profile.name}{profile.kind==="dependent"?" · Dependent":""}</span>}</div>}
     </header>

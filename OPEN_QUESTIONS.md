@@ -27,3 +27,8 @@
 
 - M5 allows choosing a home timezone before importing. Post-import changes are explicitly refused because silently regrouping daily history would invalidate summaries, period anchors and alert timing.
 - Supporting such changes needs a tested full re-bucketing workflow. Until then the UI explains the restriction; country of residence is separate from the history timezone.
+
+## OQ006 — Additional PDF scripts
+
+- Clinical PDFs embed Noto Sans and Noto Sans Devanagari, with Latin/Hindi visual fixtures. Characters outside these fonts' coverage, including emoji, cause an explicit PDF-unavailable response rather than a corrupted clinical document. The complete HTML summary and stored original text remain available.
+- Add and visually verify further script fonts before advertising multilingual PDF support beyond the bundled coverage. No patient text is sent to an external font or translation service.

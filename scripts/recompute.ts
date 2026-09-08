@@ -1,9 +1,9 @@
-import { loadEnvConfig } from "@next/env";
+import nextEnv from "@next/env";
 import postgres from "postgres";
 import { createSummaryStore } from "../src/lib/jobs/summary-store";
 import { runSummaryJobs } from "../src/lib/jobs/summary-runner";
 
-loadEnvConfig(process.cwd());
+nextEnv.loadEnvConfig(process.cwd());
 async function main() {
   if (!process.env.DATABASE_URL) throw new Error("DATABASE_URL is required.");
   const db = postgres(process.env.DATABASE_URL, { max: 2, prepare: false });

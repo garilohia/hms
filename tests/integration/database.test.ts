@@ -66,9 +66,9 @@ describe("real Postgres: migrations, authentication guard, RLS and audited acces
     if (cx) { await q("ROLLBACK"); cx.release(); }
     await db.end();
   });
-  it("migrates all 21 required/supporting tables from scratch with RLS", async () => {
+  it("migrates all 22 required/supporting tables from scratch with RLS", async () => {
     const tables=await q("select relname,relrowsecurity from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname=$1 and c.relkind='r'",[schema]);
-    expect(tables).toHaveLength(21);
+    expect(tables).toHaveLength(22);
     expect(tables.every(t => t.relrowsecurity)).toBe(true);
   });
   it("permits A to see their metric but B cannot read A's data", async () => {
@@ -76,6 +76,205 @@ describe("real Postgres: migrations, authentication guard, RLS and audited acces
     expect(await q("select * from " + t("metrics"))).toHaveLength(1);
     await actAs(actors.bob);
     expect(await q("select * from " + t("metrics"))).toHaveLength(0);
+  });
+  const care = async (subject:string,action:string,data:Record<string,unknown>) => (await q("select "+fn("care_change")+"($1,$2,$3::text::jsonb) as id",[subject,action,JSON.stringify(data)]))[0].id as string;
+  const doctorRegistration={registrationNumber:"TEST-PENDING",council:"Test council",specialities:["General medicine"],languages:["English"],bio:"Sample doctor",feeInr:500,feeUsd:10,available:true};
+  async function inviteCaregiver() {
+    await owner(); await q("update auth.users set email_confirmed_at=now() where id=$1",[actors.bob]);
+    await actAs(actors.alice);return care(subjects.alice,"invite_caregiver",{partnerId:actors.bob,scopes:["summary_only","alerts"]});
+  }
+  it("registers a pending doctor without trusting supplied verification or role fields",async()=>{
+    await actAs(actors.bob);
+    const [r]=await q("select "+fn("doctor_profile")+"('register',$1::text::jsonb) as d",[JSON.stringify({...doctorRegistration,verified_at:new Date().toISOString(),role:"admin",is_sample:true})]);
+    expect(r.d.verified_at).toBeNull();expect(r.d.is_sample).toBe(false);
+    const [p]=await q("select role from "+t("profiles")+" where id=$1",[subjects.bob]);expect(p.role).toBe("doctor");
+    const [list]=await q("select "+fn("care_list")+"('directory') as d");expect(list.d.rows.map((d:{id:string})=>d.id)).toEqual([subjects.doctor]);
+  });
+  it("refuses doctor self-verification",async()=>{
+    await actAs(actors.doctor);
+    await expect(q("select "+fn("doctor_profile")+"('verify',$1::text::jsonb)",[JSON.stringify({doctorId:subjects.doctor})])).rejects.toMatchObject({code:"42501"});
+  });
+  it("allows only the database-admin role to verify and invalidates changed credentials",async()=>{
+    await q("update "+t("profiles")+" set role='admin' where id=$1",[subjects.alice]);
+    await actAs(actors.bob);await q("select "+fn("doctor_profile")+"('register',$1::text::jsonb)",[JSON.stringify(doctorRegistration)]);
+    await actAs(actors.alice);const [verified]=await q("select "+fn("doctor_profile")+"('verify',$1::text::jsonb) as d",[JSON.stringify({doctorId:subjects.bob})]);expect(verified.d.verified_at).toBeTruthy();
+    await actAs(actors.bob);
+    const [same]=await q("select "+fn("doctor_profile")+"('register',$1::text::jsonb) as d",[JSON.stringify({...doctorRegistration,bio:"Updated bio"})]);expect(same.d.verified_at).toBeTruthy();
+    const [changed]=await q("select "+fn("doctor_profile")+"('register',$1::text::jsonb) as d",[JSON.stringify({...doctorRegistration,registrationNumber:"CHANGED"})]);expect(changed.d.verified_at).toBeNull();
+  });
+  it("requires owner-selected sharing scopes and audits every doctor list read",async()=>{
+    await actAs(actors.alice);await care(subjects.alice,"link_doctor",{partnerId:subjects.doctor,scopes:["full_history"]});
+    await actAs(actors.doctor);
+    for(let i=0;i<2;i++){const [r]=await q("select "+fn("care_list")+"('patients') as v");expect(r.v.rows).toHaveLength(1);expect(r.v.rows[0].id).toBe(subjects.alice);}
+    const [history]=await q("select "+fn("patient_view")+"($1,'history') as v",[subjects.alice]);expect(history.v.can_manage).toBe(false);
+    await owner();expect(await q("select id from "+t("audit_log")+" where actor_id=$1 and action='doctor_patient_list_read'",[actors.doctor])).toHaveLength(2);
+  });
+  it("requires sharing consent before a doctor can be linked",async()=>{
+    await actAs(actors.bob);
+    await expect(care(subjects.bob,"link_doctor",{partnerId:subjects.doctor,scopes:["summary_only"]})).rejects.toMatchObject({code:"42501"});
+  });
+  it("does not let a shared doctor change a patient's sharing links",async()=>{
+    await actAs(actors.doctor);
+    await expect(care(subjects.alice,"link_doctor",{partnerId:subjects.doctor,scopes:["full_history"]})).rejects.toMatchObject({code:"42501"});
+  });
+  it("requires the named caregiver to accept before any history access",async()=>{
+    await inviteCaregiver();await actAs(actors.bob);
+    const [r]=await q("select "+fn("care_list")+"('incoming') as v");expect(r.v.rows).toHaveLength(1);expect(r.v.rows[0].can_read_summary).toBe(false);
+    await expect(q("select "+fn("patient_view")+"($1,'today')",[subjects.alice])).rejects.toMatchObject({code:"42501"});
+  });
+  it("accepts a caregiver as read-only, audits views and requires reacceptance after scope changes",async()=>{
+    const id=await inviteCaregiver();await actAs(actors.bob);await care(subjects.alice,"accept_caregiver",{linkId:id});
+    const [r]=await q("select "+fn("patient_view")+"($1,'today') as v",[subjects.alice]);expect(r.v.can_manage).toBe(false);expect(r.v.can_read_history).toBe(false);expect(r.v.can_read_alerts).toBe(true);
+    await actAs(actors.alice);await care(subjects.alice,"invite_caregiver",{partnerId:actors.bob,scopes:["full_history"]});
+    await actAs(actors.bob);const [pending]=await q("select "+fn("care_list")+"('incoming') as v");expect(pending.v.rows[0].status).toBe("invited");expect(pending.v.rows[0].can_read_history).toBe(false);
+    await owner();expect(await q("select id from "+t("audit_log")+" where actor_id=$1 and target_table='patient_view'",[actors.bob])).toHaveLength(1);
+  });
+  it("refuses another account's invitation acceptance",async()=>{
+    const id=await inviteCaregiver();await actAs(actors.doctor);
+    await expect(care(subjects.alice,"accept_caregiver",{linkId:id})).rejects.toMatchObject({code:"42501"});
+  });
+  it("revokes caregiver access on the next request",async()=>{
+    const id=await inviteCaregiver();await actAs(actors.bob);await care(subjects.alice,"accept_caregiver",{linkId:id});
+    await actAs(actors.alice);await care(subjects.alice,"revoke_caregiver",{linkId:id});
+    await actAs(actors.bob);const [r]=await q("select "+fn("care_list")+"('incoming') as v");expect(r.v.rows).toEqual([]);
+    await expect(q("select "+fn("patient_view")+"($1,'today')",[subjects.alice])).rejects.toMatchObject({code:"42501"});
+  });
+  it("does not expose owner sharing lists to another account",async()=>{
+    await actAs(actors.bob);
+    await expect(q("select "+fn("care_list")+"('caregivers',$1)",[subjects.alice])).rejects.toMatchObject({code:"42501"});
+  });
+  const consultChange=async(subject:string,action:string,data:Record<string,unknown>)=>(await q("select "+fn("consult_change")+"($1,$2,$3::text::jsonb) as id",[subject,action,JSON.stringify(data)]))[0].id as string;
+  async function requestConsult() {
+    await owner();await q("update "+t("doctors")+" set available=true where id=$1",[subjects.doctor]);
+    await actAs(actors.alice);
+    const request={doctorId:subjects.doctor,type:"trend_review",note:" Sample trend question ",days:30,requestId:randomUUID()};
+    const id=await consultChange(subjects.alice,"request",request);expect(await consultChange(subjects.alice,"request",request)).toBe(id);return id;
+  }
+  it("captures immutable summary snapshots without raw metrics and audits doctor downloads",async()=>{
+    await actAs(actors.alice);
+    await q("select "+fn("record_consent")+"($1,'data_ingestion',true,'test',$2)",[subjects.alice,hash]);
+    await q("select "+fn("medications")+"($1,'[\"Sample medication - reported, not advice\"]')",[subjects.alice]);
+    const [snap]=await q("select "+fn("clinical_summary")+"($1,30,null,true) as s",[subjects.alice]);expect(snap.s.id).toBeTruthy();expect(snap.s.body.series).toHaveLength(1);expect(snap.s.body.metrics).toBeUndefined();expect(snap.s.body.medications).toHaveLength(1);
+    await owner();await q("update "+t("daily_summaries")+" set rhr=80 where user_id=$1",[subjects.alice]);
+    await actAs(actors.doctor);const [frozen]=await q("select "+fn("clinical_summary")+"($1,30,$2,false) as s",[subjects.alice,snap.s.id]);expect(Number(frozen.s.body.series[0].rhr)).toBe(60);
+    await owner();expect(await q("select id from "+t("audit_log")+" where actor_id=$1 and action='clinical_summary_read'",[actors.doctor])).toHaveLength(1);
+  });
+  it("requires processing consent before recording reported medications",async()=>{
+    await actAs(actors.alice);
+    await expect(q("select "+fn("medications")+"($1,'[\"Sample medication\"]')",[subjects.alice])).rejects.toMatchObject({code:"42501"});
+  });
+  it("rejects clinical-PDF access for an ordinary summary-only caregiver",async()=>{
+    const id=await inviteCaregiver();await actAs(actors.bob);await care(subjects.alice,"accept_caregiver",{linkId:id});
+    await expect(q("select "+fn("clinical_summary")+"($1)",[subjects.alice])).rejects.toMatchObject({code:"42501"});
+  });
+  it("does not allow a shared doctor to create owner snapshots",async()=>{
+    await actAs(actors.doctor);await expect(q("select "+fn("clinical_summary")+"($1,30,null,true)",[subjects.alice])).rejects.toMatchObject({code:"42501"});
+  });
+  it("preserves guardian consent provenance in a dependent's clinical snapshot",async()=>{
+    await actAs(actors.guardian);const [child]=await q("select "+fn("create_dependent")+"('Sample child','2015-01-01','test',$1) as id",[hash]);
+    await q("select "+fn("record_consent")+"($1,'doctor_sharing',true,'test',$2)",[child.id,hash]);
+    await care(child.id,"link_doctor",{partnerId:subjects.doctor,scopes:["summary_only"]});
+    const [snapshot]=await q("select "+fn("clinical_summary")+"($1,90,null,true) as s",[child.id]);
+    await actAs(actors.doctor);const [view]=await q("select "+fn("clinical_summary")+"($1,90,$2,false) as s",[child.id,snapshot.s.id]);expect(view.s.body.consent_given_by_guardian).toBe(true);expect(view.s.body.profile.id).toBe(child.id);
+  });
+  it("completes the consult state machine, deduplicates retries and retains the note in History",async()=>{
+    const id=await requestConsult();await actAs(actors.doctor);await consultChange(subjects.alice,"accept",{consultId:id});
+    const message={consultId:id,messageId:randomUUID(),body:"Sample doctor message"};
+    await consultChange(subjects.alice,"message",message);await consultChange(subjects.alice,"message",message);
+    await actAs(actors.alice);await consultChange(subjects.alice,"message",{consultId:id,messageId:randomUUID(),body:"Sample patient message"});
+    const [chat]=await q("select "+fn("consult_read")+"($1) as v",[id]);expect(chat.v.messages).toHaveLength(2);expect(chat.v.is_doctor).toBe(false);expect(chat.v.consult.attached_summary_id).toBeTruthy();
+    await actAs(actors.doctor);await consultChange(subjects.alice,"close",{consultId:id,note:"Sample completed note. Discuss follow-up with your doctor."});
+    await actAs(actors.alice);const [history]=await q("select "+fn("consult_list")+"($1,null,true) as v",[subjects.alice]);expect(history.v.rows[0].doctor_note).toContain("Sample completed note");expect(history.v.rows[0].status).toBe("completed");
+  });
+  it("refuses patient acceptance of their own consult",async()=>{
+    const id=await requestConsult();await expect(consultChange(subjects.alice,"accept",{consultId:id})).rejects.toMatchObject({code:"42501"});
+  });
+  it("requires acceptance before exchanging chat messages",async()=>{
+    const id=await requestConsult();await expect(consultChange(subjects.alice,"message",{consultId:id,messageId:randomUUID(),body:"Too early"})).rejects.toMatchObject({code:"22023"});
+  });
+  it("does not permit messages after closing a consult",async()=>{
+    const id=await requestConsult();await actAs(actors.doctor);await consultChange(subjects.alice,"accept",{consultId:id});await consultChange(subjects.alice,"close",{consultId:id,note:"Sample note"});
+    await actAs(actors.alice);await expect(consultChange(subjects.alice,"message",{consultId:id,messageId:randomUUID(),body:"Too late"})).rejects.toMatchObject({code:"22023"});
+  });
+  it("loses doctor chat and snapshot access when the patient revokes their link",async()=>{
+    const id=await requestConsult();const [links]=await q("select "+fn("care_list")+"('doctors',$1) as v",[subjects.alice]);await care(subjects.alice,"revoke_doctor",{linkId:links.v.rows[0].id});
+    const [own]=await q("select "+fn("consult_read")+"($1) as v",[id]);expect(own.v.consult.status).toBe("cancelled");
+    await actAs(actors.doctor);const [list]=await q("select "+fn("consult_list")+"() as v");expect(list.v.rows).toEqual([]);
+    await expect(q("select "+fn("consult_read")+"($1)",[id])).rejects.toMatchObject({code:"42501"});
+  });
+  it("cannot attach or inspect another patient's snapshot",async()=>{
+    await actAs(actors.alice);const [s]=await q("select "+fn("clinical_summary")+"($1,30,null,true) as s",[subjects.alice]);
+    await actAs(actors.bob);await expect(q("select "+fn("clinical_summary")+"($1,30,$2,false)",[subjects.bob,s.s.id])).rejects.toMatchObject({code:"42501"});
+  });
+  it("schedules a real supplied meeting link without creating a video service",async()=>{
+    const id=await requestConsult();await actAs(actors.doctor);const future=new Date(Date.now()+86400000).toISOString();
+    await consultChange(subjects.alice,"schedule",{consultId:id,scheduledFor:future,callUrl:"https://meet.google.com/abc-defg-hij"});
+    await consultChange(subjects.alice,"accept",{consultId:id});
+    const [r]=await q("select "+fn("consult_read")+"($1) as v",[id]);expect(r.v.consult.status).toBe("scheduled");expect(r.v.consult.call_url).toBe("https://meet.google.com/abc-defg-hij");
+  });
+  it("rejects unsafe call links at the database boundary",async()=>{
+    const id=await requestConsult();await actAs(actors.doctor);
+    await expect(consultChange(subjects.alice,"schedule",{consultId:id,scheduledFor:new Date(Date.now()+86400000).toISOString(),callUrl:"https://meet.google.com.evil.example/call"})).rejects.toMatchObject({code:"22023"});
+  });
+  async function transferFixture(){
+    await owner();const [dates]=await q("select (current_date+1-interval '18 years')::date::text birth,(current_date+1)::text adult_day");
+    await actAs(actors.guardian);const [child]=await q("select "+fn("create_dependent")+"('Sample almost-adult',$1,'test',$2) as id",[dates.birth,hash]);
+    // Only rolled-back synthetic fixtures move to the future test date; production Auth has no clock override.
+    await owner();await q("update "+t("profiles")+" set dob=$1 where id=$2",[dates.birth,subjects.bob]);await q("update auth.users set email_confirmed_at=now() where id=$1",[actors.bob]);
+    return {subject:String(child.id),adult:dates.adult_day+"T12:00:00Z"};
+  }
+  const acceptance={acceptOwnership:true,replaceEmptyProfile:true,consent:true,disclaimer:true};
+  async function transferAt(subject:string,action:string,data:Record<string,unknown>,at:string){
+    // Database-owner verification only. The application role must be denied this helper.
+    await owner();return (await q('select "'+privateSchema+'".transfer_at($1,$2,$3::text::jsonb,\'test\',$4,$5) as id',[subject,action,JSON.stringify(data),hash,at]))[0].id as string;
+  }
+  it("rejects guardian-initiated conversion before the eighteenth birthday",async()=>{
+    const f=await transferFixture();await actAs(actors.guardian);
+    await expect(q("select "+fn("transfer_change")+"($1,'offer',$2::text::jsonb,'test',$3)",[f.subject,JSON.stringify({recipientId:actors.bob,now:f.adult}),hash])).rejects.toMatchObject({code:"42501"});
+  });
+  it("does not expose the controlled-clock transfer helper to application roles",async()=>{
+    const f=await transferFixture();await actAs(actors.guardian);
+    await expect(q('select "'+privateSchema+'".transfer_at($1,\'offer\',$2::text::jsonb,\'test\',$3,$4)',[f.subject,JSON.stringify({recipientId:actors.bob}),hash,f.adult])).rejects.toMatchObject({code:"42501"});
+  });
+  it("transfers at eighteen without changing history IDs or historical guardian consent",async()=>{
+    const f=await transferFixture();await actAs(actors.guardian);
+    const [source]=await q("select "+fn("connect_source")+"($1,'generic_csv','transfer-test') as id",[f.subject]);
+    await owner();await q("insert into "+t("metrics")+"(user_id,source_id,metric_type,value,unit,recorded_at) values($1,$2,'heart_rate',70,'bpm',now()-interval '1 day')",[f.subject,source.id]);
+    await actAs(actors.guardian);const [snapshot]=await q("select "+fn("clinical_summary")+"($1,30,null,true) as s",[f.subject]);
+    const offer=await transferAt(f.subject,"offer",{recipientId:actors.bob},f.adult);
+    await actAs(actors.bob);await transferAt(f.subject,"accept",{offerId:offer,...acceptance},f.adult);
+    await q("SET CONSTRAINTS ALL IMMEDIATE");
+    const [p]=await q("select id,kind,auth_user_id,owner_account_id from "+t("profiles")+" where id=$1",[f.subject]);expect(p).toMatchObject({id:f.subject,kind:"self",auth_user_id:actors.bob,owner_account_id:actors.bob});
+    expect(await q("select id from "+t("profiles")+" where id=$1",[subjects.bob])).toHaveLength(0);
+    expect(await q("select id from "+t("metrics")+" where user_id=$1",[f.subject])).toHaveLength(1);
+    const cs=await q("select authority,revoked_at from "+t("consents")+" where user_id=$1 order by granted_at",[f.subject]);expect(cs).toHaveLength(2);expect(cs[0].authority).toBe("guardian");expect(cs[0].revoked_at).toBeTruthy();expect(cs.at(-1)!.authority).toBe("self");expect(cs.at(-1)!.revoked_at).toBeNull();
+    const [s]=await q("select body from "+t("summary_snapshots")+" where id=$1",[snapshot.s.id]);expect(s.body.consent_given_by_guardian).toBe(true);
+    await actAs(actors.bob);const [read]=await q("select "+fn("patient_view")+"($1,'raw') as v",[f.subject]);expect(read.v.can_manage).toBe(true);expect(read.v.metrics).toHaveLength(1);
+    await actAs(actors.guardian);await expect(q("select "+fn("patient_view")+"($1,'today')",[f.subject])).rejects.toMatchObject({code:"42501"});
+  });
+  it("refuses replacing an established recipient profile and keeps both profiles intact",async()=>{
+    const f=await transferFixture();await actAs(actors.guardian);const id=await transferAt(f.subject,"offer",{recipientId:actors.bob},f.adult);
+    await q("insert into "+t("data_sources")+"(user_id,provider) values($1,'generic_csv')",[subjects.bob]);
+    await actAs(actors.bob);await q("SAVEPOINT transfer_attempt");
+    await expect(transferAt(f.subject,"accept",{offerId:id,...acceptance},f.adult)).rejects.toMatchObject({code:"23514"});
+    await q("ROLLBACK TO SAVEPOINT transfer_attempt");await owner();
+    const profiles=await q("select id,owner_account_id from "+t("profiles")+" where id in ($1,$2)",[f.subject,subjects.bob]);
+    expect(profiles).toHaveLength(2);expect(profiles.find(p=>p.id===f.subject)?.owner_account_id).toBe(actors.guardian);
+    expect(profiles.find(p=>p.id===subjects.bob)?.owner_account_id).toBe(actors.bob);
+    expect(await q("select id from "+t("data_sources")+" where user_id=$1",[subjects.bob])).toHaveLength(1);
+    const [offer]=await q("select accepted_at from "+t("profile_transfers")+" where id=$1",[id]);expect(offer.accepted_at).toBeNull();
+  });
+  it("requires all explicit recipient confirmations",async()=>{
+    const f=await transferFixture();await actAs(actors.guardian);const id=await transferAt(f.subject,"offer",{recipientId:actors.bob},f.adult);
+    await actAs(actors.bob);await expect(transferAt(f.subject,"accept",{offerId:id,...acceptance,replaceEmptyProfile:false},f.adult)).rejects.toMatchObject({code:"23514"});
+  });
+  it("cannot accept a transfer offered to a different account",async()=>{
+    const f=await transferFixture();await actAs(actors.guardian);const id=await transferAt(f.subject,"offer",{recipientId:actors.bob},f.adult);
+    await actAs(actors.alice);await expect(transferAt(f.subject,"accept",{offerId:id,...acceptance},f.adult)).rejects.toMatchObject({code:"42501"});
+  });
+  it("expires unaccepted transfer offers after seven days",async()=>{
+    const f=await transferFixture();await actAs(actors.guardian);const id=await transferAt(f.subject,"offer",{recipientId:actors.bob},f.adult);
+    await actAs(actors.bob);await expect(transferAt(f.subject,"accept",{offerId:id,...acceptance},new Date(Date.parse(f.adult)+7*86400000).toISOString())).rejects.toMatchObject({code:"42501"});
   });
   it("pages patient history past a year without leaking raw data to summary-only doctors",async()=>{
     await q("insert into "+t("daily_summaries")+"(user_id,day,rhr) select $1,current_date-n,60 from generate_series(1,400) n",[subjects.alice]);

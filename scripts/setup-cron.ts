@@ -1,7 +1,7 @@
-import { loadEnvConfig } from "@next/env";
+import nextEnv from "@next/env";
 import postgres from "postgres";
 import { cronCommand, cronEndpoint, cronJobName, cronSchedule } from "../src/lib/jobs/cron-config";
-loadEnvConfig(process.cwd());
+nextEnv.loadEnvConfig(process.cwd());
 async function main() {
   const secret = process.env.CRON_SECRET;
   if (!secret || secret.length < 32 || !process.env.DATABASE_URL || !process.env.NEXT_PUBLIC_APP_URL) throw new Error("Configure DATABASE_URL, the deployed NEXT_PUBLIC_APP_URL and a random CRON_SECRET of at least 32 characters first.");

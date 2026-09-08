@@ -1,8 +1,8 @@
-import { loadEnvConfig } from "@next/env";
+import nextEnv from "@next/env";
 import postgres from "postgres";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
-loadEnvConfig(process.cwd());
+nextEnv.loadEnvConfig(process.cwd());
 async function main() {
   const input = process.env.DATABASE_URL;
   if (!input) throw new Error("DATABASE_URL is required.");
