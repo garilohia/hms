@@ -1,20 +1,15 @@
-import Link from "next/link";
-import { redirect } from "next/navigation";
-import { z } from "zod";
-import { authenticatedClient } from "@/src/lib/auth/server";
-import { DataImport } from "./upload";
+import { patientPage } from "@/src/lib/patient/server";
+import { AppFrame } from "../../ui/frame";
+import { Records } from "../records";
+import { DataManagement } from "./management";
 
-export default async function DataPage() {
-  const session = await authenticatedClient();
-  if (!session) redirect("/sign-in");
-  const { data, error } = await session.client.rpc("hms_list_profiles");
-  if (error) throw new Error("We could not load your profiles.");
-  const profiles = z.array(z.object({ id: z.uuid(), name: z.string(), kind: z.enum(["self", "dependent"]), timezone: z.string() })).parse(data);
-  return <main className="mx-auto max-w-xl space-y-6 px-5 py-10">
-    <Link href="/account" className="underline">Your account</Link>
-    <h1 className="text-3xl font-semibold">Devices &amp; data</h1>
+export default async function DataPage({searchParams}:{searchParams:Promise<{profile?:string}>}) {
+  const {view,profiles}=await patientPage("sources",(await searchParams).profile);
+  return <AppFrame profile={view.profile} profiles={profiles}><div className="stack">
+    <h1 className="page-title">Devices &amp; data</h1>
     <p>Import an Apple Health ZIP or a CSV. Your archive stays on this device. Only normalised readings are sent to HMS.</p>
-    <DataImport profiles={profiles} />
+    {view.can_manage?<DataManagement profile={view.profile}/>:<Records userId={view.profile.id} section="sources" />}
+    {view.can_manage&&<a className="button secondary" href={"/today?profile="+view.profile.id}>View and refresh Today</a>}
     <p className="text-sm text-slate-600">Fitbit API and aggregator connections: coming soon.</p>
-  </main>;
+  </div></AppFrame>;
 }

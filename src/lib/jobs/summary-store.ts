@@ -21,16 +21,18 @@ const metricParser = z.object({ metric_type: z.enum(metricTypes), value: numeric
 export class PostgresSummaryStore implements SummaryJobStore {
   private transaction: Transaction;
   private table: (name: string) => string;
-  constructor(private db: Executor, options: { transaction: Transaction; schema?: string }) {
+  private ownerScope?: { subject: string; actor: string };
+  constructor(private db: Executor, options: { transaction: Transaction; schema?: string; ownerScope?: { subject: string; actor: string } }) {
     const schema = options.schema || "public";
     if (!/^[a-z_][a-z0-9_]*$/.test(schema)) throw new Error("Invalid internal schema name.");
     this.table = name => '"' + schema + '"."' + name + '"';
     this.transaction = options.transaction;
+    this.ownerScope = options.ownerScope ? z.object({ subject: z.uuid(), actor: z.uuid() }).parse(options.ownerScope) : undefined;
   }
   async claim(now: Date): Promise<SummaryJob | null> {
     const t = this.table;
     return this.transaction(async tx => {
-      const [job] = await tx.unsafe("select j.id,j.user_id,j.day::text,j.attempts from " + t("summary_jobs") + " j join " + t("profiles") + " p on p.id=j.user_id where j.revision>j.processed_revision and j.available_at<=$1 and (j.locked_until is null or j.locked_until<=$1) and exists (select 1 from " + t("consents") + " c where c.user_id=j.user_id and c.consent_type='data_ingestion' and c.revoked_at is null) order by j.day,j.id limit 1 for update of j skip locked", [now]);
+      const [job] = await tx.unsafe("select j.id,j.user_id,j.day::text,j.attempts from " + t("summary_jobs") + " j join " + t("profiles") + " p on p.id=j.user_id where j.revision>j.processed_revision and j.available_at<=$1 and (j.locked_until is null or j.locked_until<=$1) and exists (select 1 from " + t("consents") + " c where c.user_id=j.user_id and c.consent_type='data_ingestion' and c.revoked_at is null)" + (this.ownerScope ? " and j.user_id=$2 and p.owner_account_id=$3" : "") + " order by j.day,j.id limit 1 for update of j skip locked", this.ownerScope ? [now, this.ownerScope.subject, this.ownerScope.actor] : [now]);
       if (!job) return null;
       const token = randomUUID();
       await tx.unsafe("update " + t("summary_jobs") + " set lease_token=$1,locked_until=$2,attempts=attempts+1 where id=$3", [token, new Date(now.getTime() + 120000), job.id]);
@@ -51,6 +53,14 @@ export class PostgresSummaryStore implements SummaryJobStore {
       if (!profile) return "stale";
       const [current] = await tx.unsafe("select revision from " + t("summary_jobs") + " where id=$1 and lease_token=$2 for update", [job.id, job.token]);
       if (!current) return "stale";
+      if (this.ownerScope) {
+        const scope = this.ownerScope;
+        const live = await tx.unsafe("select 1 from auth.users where id=$1 and deleted_at is null and (banned_until is null or banned_until<=$2)", [scope.actor,now]);
+        if (job.userId !== scope.subject || String(profile.owner_account_id) !== scope.actor || !live.length) {
+          await tx.unsafe("update " + t("summary_jobs") + " set lease_token=null,locked_until=null where id=$1 and lease_token=$2", [job.id,job.token]);
+          return "withheld";
+        }
+      }
       const consent = await tx.unsafe("select 1 from " + t("consents") + " where user_id=$1 and consent_type='data_ingestion' and revoked_at is null", [job.userId]);
       if (!consent.length) {
         await tx.unsafe("update " + t("summary_jobs") + " set lease_token=null,locked_until=null where id=$1 and lease_token=$2", [job.id, job.token]);
@@ -100,6 +110,6 @@ export class PostgresSummaryStore implements SummaryJobStore {
   }
 }
 
-export function createSummaryStore(db: postgres.Sql) {
-  return new PostgresSummaryStore(db, { transaction: <T>(work: (tx: Executor) => Promise<T>) => db.begin(tx => work(tx)) as Promise<T> });
+export function createSummaryStore(db: postgres.Sql, ownerScope?: { subject: string; actor: string }) {
+  return new PostgresSummaryStore(db, { ownerScope, transaction: <T>(work: (tx: Executor) => Promise<T>) => db.begin(tx => work(tx)) as Promise<T> });
 }

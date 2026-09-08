@@ -77,6 +77,58 @@ describe("real Postgres: migrations, authentication guard, RLS and audited acces
     await actAs(actors.bob);
     expect(await q("select * from " + t("metrics"))).toHaveLength(0);
   });
+  it("pages patient history past a year without leaking raw data to summary-only doctors",async()=>{
+    await q("insert into "+t("daily_summaries")+"(user_id,day,rhr) select $1,current_date-n,60 from generate_series(1,400) n",[subjects.alice]);
+    await actAs(actors.alice);
+    const [first]=await q("select "+fn("patient_view")+"($1,'history') as v",[subjects.alice]);
+    expect(first.v.summaries).toHaveLength(365); expect(first.v.next_cursor.day).toBeTruthy();
+    const [second]=await q("select "+fn("patient_view")+"($1,'history',null,null,$2::text::jsonb) as v",[subjects.alice,JSON.stringify(first.v.next_cursor)]);
+    expect(second.v.summaries).toHaveLength(36); expect(second.v.next_cursor).toBeNull();
+    expect(first.v.summaries.at(-1).day>second.v.summaries[0].day).toBe(true);
+    await actAs(actors.doctor);
+    const [summary]=await q("select "+fn("patient_view")+"($1,'today') as v",[subjects.alice]);
+    expect(summary.v.summaries).toHaveLength(1); expect(summary.v.alerts).toBeUndefined(); expect(summary.v.can_manage).toBe(false);
+    await expect(q("select "+fn("patient_view")+"($1,'raw')",[subjects.alice])).rejects.toMatchObject({code:"42501"});
+  });
+  it("audits new scoped views and checks revoked access on the next call",async()=>{
+    await actAs(actors.doctor); await q("select "+fn("patient_view")+"($1,'today')",[subjects.alice]);
+    await owner();
+    const [audit]=await q("select count(*)::int as n from "+t("audit_log")+" where actor_id=$1 and target_table='patient_view'",[actors.doctor]); expect(audit.n).toBe(1);
+    await q("update "+t("doctor_patient_links")+" set status='revoked',revoked_at=now() where patient_id=$1",[subjects.alice]);
+    await actAs(actors.doctor);
+    await expect(q("select "+fn("patient_view")+"($1,'today')",[subjects.alice])).rejects.toMatchObject({code:"42501"});
+  });
+  it("persists onboarding and requires explicit cycle opt-in and ingestion consent",async()=>{
+    await actAs(actors.alice);
+    await q("select "+fn("profile_settings")+"($1,'identity',$2::text::jsonb)",[subjects.alice,JSON.stringify({name:"Alice",dob:"1990-01-01",sex:"female",country:"IN",timezone:"Asia/Kolkata"})]);
+    await q("select "+fn("profile_settings")+"($1,'complete','{\"disclaimer\":true}')",[subjects.alice]);
+    await q("select "+fn("profile_settings")+"($1,'cycle','{\"enabled\":true}')",[subjects.alice]);
+    await q("select "+fn("record_consent")+"($1,'data_ingestion',true,'test',$2)",[subjects.alice,hash]);
+    await q("select "+fn("profile_settings")+"($1,'period',$2::text::jsonb)",[subjects.alice,JSON.stringify({start:"2026-08-01",end:"2026-08-05"})]);
+    const [p]=await q("select onboarding_completed_at,cycle_tracking_enabled from "+t("profiles")+" where id=$1",[subjects.alice]);
+    expect(p.onboarding_completed_at).toBeTruthy(); expect(p.cycle_tracking_enabled).toBe(true);
+    const [log]=await q("select origin from "+t("cycle_logs")+" where user_id=$1",[subjects.alice]); expect(log.origin).toBe("manual");
+  });
+  it("does not let a different actor edit a patient's identity",async()=>{
+    await actAs(actors.bob);
+    await expect(q("select "+fn("profile_settings")+"($1,'cycle','{\"enabled\":true}')",[subjects.alice])).rejects.toMatchObject({code:"42501"});
+  });
+  it("rejects changing an adult DOB into a minor through profile settings",async()=>{
+    await actAs(actors.alice);
+    await expect(q("select "+fn("profile_settings")+"($1,'identity',$2::text::jsonb)",[subjects.alice,JSON.stringify({name:"Alice",dob:"2015-01-01",sex:"female",country:"IN",timezone:"Asia/Kolkata"})])).rejects.toMatchObject({code:"22023"});
+  });
+  it("owner-scoped summary processing cannot claim another patient's jobs",async()=>{
+    await q("insert into "+t("consents")+"(user_id,granted_by,authority,consent_type,policy_version,ip_hash) values($1,$2,'self','data_ingestion','test',$3)",[subjects.alice,actors.alice,hash]);
+    await q("insert into "+t("summary_jobs")+"(user_id,day) values($1,current_date)",[subjects.alice]);
+    const store=new PostgresSummaryStore(cx,{schema,ownerScope:{subject:subjects.alice,actor:actors.bob},transaction:async work=>work(cx)});
+    expect(await store.claim(new Date(Date.now()+1000))).toBeNull();
+  });
+  it("point source lookup is scoped even when the source belongs to a different profile",async()=>{
+    await actAs(actors.alice);
+    const [result]=await q("select "+fn("patient_source")+"($1,$2) as s",[subjects.alice,source]);expect(result.s.id).toBe(source);
+    await actAs(actors.bob);
+    await expect(q("select "+fn("patient_source")+"($1,$2)",[subjects.bob,source])).rejects.toMatchObject({code:"42501"});
+  });
   it("denies anonymous reads", async () => {
     await q("SET LOCAL ROLE anon");
     await expect(q("select * from " + t("metrics"))).rejects.toMatchObject({code:"42501"});

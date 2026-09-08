@@ -12,7 +12,7 @@ test("sample alerts, protected cron, acknowledgement, settings and Chrome notifi
     const link = await admin.auth.admin.generateLink({ type: "magiclink", email: "hms-alert-" + randomUUID() + "@example.com", options: { data: { dob: "1990-01-01", name: "Sample alert tester" } } });
     if (link.error) throw new Error("Could not create test session: " + link.error.code);
     actor = link.data.user.id;
-    await page.goto("/auth/confirm?token_hash=" + encodeURIComponent(link.data.properties.hashed_token));
+    await page.goto("/auth/confirm?next=/account&token_hash=" + encodeURIComponent(link.data.properties.hashed_token));
     await expect(page).toHaveURL(baseURL + "/account");
     const [profile] = await db.unsafe("select id from public.profiles where auth_user_id=$1", [actor]); subject = String(profile.id);
     await page.goto("/more/alerts");

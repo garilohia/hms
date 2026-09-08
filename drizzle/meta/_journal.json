@@ -64,6 +64,27 @@
       "when": 1788826446778,
       "tag": "0008_reject_future_readings",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1788827187795,
+      "tag": "0009_patient_preferences",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1788827195564,
+      "tag": "0010_patient_operations",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1788827921423,
+      "tag": "0011_source_provenance",
+      "breakpoints": true
     }
   ]
 }

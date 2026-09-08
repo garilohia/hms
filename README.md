@@ -22,6 +22,16 @@ Use only the publishable key in public clients. `SUPABASE_SECRET_KEY`, `DATABASE
 
 Read PLAN.md and AGENTS.md before development. PROGRESS.md records verified milestones; DECISIONS.md records architecture choices and OPEN_QUESTIONS.md tracks unresolved dependencies. M0 provides tooling; later feature milestones are not complete until their recorded verification passes.
 
+## Patient screens
+
+New sign-ins open four-step onboarding; completed accounts open `/today`. The three tabs are Today, Doctors and History. More contains imports, cycle display opt-in, raw records, baselines, alert configuration and account access. Doctor workflows remain the M6 milestone. Choose your timezone before importing; post-import timezone changes are not enabled in this version. In History, All opens bounded pages with Earlier/Latest controls instead of dropping old readings. Select a chart point or a reading day to inspect its source.
+
+Today can process bounded, owner-only summary work while the page is open. This helps local imports complete even before a deployed cron exists; persisted jobs and escalation still use the independent minute dispatcher in production. Missing data is never shown as zero. No health data is cached for offline use.
+
+`npm run build && npm run golden:verify` runs the currently enabled golden paths against the production build at 390 px. Use `HMS_TEST_PORT` to choose another port. Tests create only synthetic accounts/readings and remove them afterwards. Do not overlap database migration/RLS tests with live Auth tests: temporary Auth-trigger DDL can block Auth writes until the test transaction rolls back. Stop an active development server before final production verification to avoid stale development artifacts.
+
+PWA verification uses current Chrome installability errors, the actual manifest/192- and 512-px PNG icons, and the active worker. Lighthouse's PWA category is deprecated; see D010. Chrome's install menu or Safari's Share → Add to Home Screen installs the app. It still needs a connection.
+
 ## Analytics jobs
 
 `npm run summaries:recompute` drains durable pending summary work using bounded, retryable batches, including alert evaluation. `npm run summaries:verify` compares the three seeded profiles' stored summaries, scores, baselines and insights against fresh pure calculations.

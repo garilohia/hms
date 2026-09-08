@@ -1,0 +1,29 @@
+{
+  "milestone": "M5",
+  "verified_on": "2026-09-08",
+  "target": "local production Next.js build with live Supabase synthetic fixtures",
+  "unit_tests_passed": 90,
+  "database_tests_passed": 47,
+  "golden_paths_passed": [1, 2],
+  "browser_regressions_passed": { "e2e": 6, "auth": 1, "alerts": 1 },
+  "viewport_width_px": 390,
+  "horizontal_overflow": false,
+  "visual_checks": ["Today", "temperature chart with cycle shading", "source details"],
+  "pwa": {
+    "browser": "Chromium 153.0.8010.12",
+    "profile": "disposable persistent profile; no user browser data",
+    "manifest_errors": [],
+    "installability_errors": [],
+    "png_icon_sizes_px": [192, 512],
+    "service_worker_state": "activated",
+    "cache_entries": 0,
+    "lighthouse_pwa_audit": "deprecated; current Chrome installability check used (D010)"
+  },
+  "consent_withdrawal": "UI reset verified; new normalised metric batch rejected with HTTP 403",
+  "database_advisors": "No issues found",
+  "limitations": [
+    "No physical-phone installation test",
+    "Not an offline health-data app",
+    "M6 and M7 golden paths are not yet enabled"
+  ]
+}

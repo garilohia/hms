@@ -44,7 +44,7 @@ test("CSV round-trip and 210 MiB Apple ZIP in a browser worker, bounded memory a
     if (link.error) throw new Error("Could not create import test actor: " + link.error.code);
     actor = link.data.user.id;
     const [p] = await db.unsafe("select id from public.profiles where auth_user_id=$1", [actor]); subject = p.id;
-    await page.goto("/auth/confirm?token_hash=" + encodeURIComponent(link.data.properties.hashed_token));
+    await page.goto("/auth/confirm?next=/account&token_hash=" + encodeURIComponent(link.data.properties.hashed_token));
     await expect(page).toHaveURL(baseURL + "/account");
     await page.goto("/more/data");
     await page.getByRole("checkbox").check();

@@ -6,7 +6,7 @@ import { httpTransport } from "@/src/lib/ingestion/http";
 import { SimulatorAdapter, personas, type Persona } from "@/src/lib/ingestion/simulator";
 
 type Profile = { id: string; name: string; kind: "self" | "dependent"; timezone: string };
-export function DataImport({ profiles }: { profiles: Profile[] }) {
+export function DataImport({ profiles, onBusyChange, onComplete }: { profiles: Profile[]; onBusyChange?: (busy:boolean)=>void; onComplete?:()=>void }) {
   const [userId, setUserId] = useState(profiles[0]?.id || "");
   const [consent, setConsent] = useState(false);
   const [file, setFile] = useState<File>();
@@ -18,6 +18,7 @@ export function DataImport({ profiles }: { profiles: Profile[] }) {
   const worker = useRef<Worker | null>(null);
   const abort = useRef<AbortController | null>(null);
   useEffect(() => () => { worker.current?.terminate(); abort.current?.abort(); }, []);
+  useEffect(()=>{onBusyChange?.(busy);},[busy,onBusyChange]);
   const selected = profiles.find(p => p.id === userId);
   async function grantConsent() {
     if (!consent) throw new Error("Give consent before importing data.");
@@ -37,6 +38,7 @@ export function DataImport({ profiles }: { profiles: Profile[] }) {
         const result = await adapter.sync(source);
         setMessage("Sample data: " + result.inserted + " readings added; " + result.skipped + " duplicates skipped.");
         setBusy(false);
+        onComplete?.();
       } else if (file) {
         worker.current?.terminate();
         const active = new Worker(new URL("../../../src/lib/ingestion/import.worker.ts", import.meta.url));
@@ -45,6 +47,7 @@ export function DataImport({ profiles }: { profiles: Profile[] }) {
           setProgress(event.data);
           if (event.data.status !== "working") {
             setBusy(false); setMessage(event.data.errors.join(" ")); active.terminate(); worker.current = null;
+            onComplete?.();
           }
         };
         active.onerror = () => { setBusy(false); setMessage("The import worker stopped. Re-import to resume safely."); active.terminate(); worker.current = null; };

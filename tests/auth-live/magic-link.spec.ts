@@ -19,7 +19,7 @@ test("real Supabase magic-link session, guardian consent, and sign-out", async (
     });
     if (error) throw new Error("Supabase could not generate the test link: " + error.code);
     actor=link.user.id;
-    await page.goto("/auth/confirm?token_hash=" + encodeURIComponent(link.properties.hashed_token));
+    await page.goto("/auth/confirm?next=/account&token_hash=" + encodeURIComponent(link.properties.hashed_token));
     await expect(page).toHaveURL(baseURL + "/account");
     await expect(page.getByText("Sample guardian", {exact:true})).toBeVisible();
     const response=await page.request.post("/api/profiles/dependents",{
