@@ -22,7 +22,9 @@
     "seed": "tsx scripts/seed.ts",
     "ingestion:verify": "playwright test --config playwright.ingestion.config.ts",
     "summaries:recompute": "tsx scripts/recompute.ts",
-    "summaries:verify": "tsx scripts/verify-summaries.ts"
+    "summaries:verify": "tsx scripts/verify-summaries.ts",
+    "cron:setup": "tsx scripts/setup-cron.ts",
+    "alerts:verify": "playwright test --config playwright.alerts.config.ts"
   },
   "dependencies": {
     "@next/env": "16.3.4",

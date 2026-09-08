@@ -17,6 +17,7 @@ export const normalisedMetric = z.object({
   metric_type: z.enum(metricTypes), value: z.number().finite().min(-1e9).max(1e9), unit: z.string().max(24),
   recorded_at: z.iso.datetime({ offset: true }).refine(s => Number.isFinite(Date.parse(s))),
   duration_s: z.number().int().min(0).max(604800).nullable().default(null),
+  at_rest: z.boolean().nullable().optional(),
   quality: z.enum(["raw", "derived", "user_entered"]).default("raw"),
   external_id: z.string().max(200).nullable().default(null), device: z.string().trim().min(1).max(200).optional(),
 }).strict().refine(m => m.unit === units[m.metric_type], "Use the canonical unit for this metric.")

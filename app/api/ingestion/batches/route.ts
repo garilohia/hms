@@ -15,7 +15,7 @@ export async function POST(request: Request) {
   const { data, error } = await session.client.rpc("hms_ingest_batch", { p_subject: userId, p_source: sourceId, p_metrics: metrics });
   if (error) {
     const invalid = ["22023", "22P02", "22007", "22008", "23514", "23502"].includes(error.code);
-    return Response.json({ error: error.code === "42501" ? "Access or ingestion consent was withdrawn. Import stopped." : invalid ? "Check this batch's records and re-import." : "The data service is temporarily unavailable. Re-import to resume safely.", code: error.code }, { status: error.code === "42501" ? 403 : invalid ? 400 : 503 });
+    return Response.json({ error: error.code === "42501" ? "Access or ingestion consent was withdrawn. Import stopped." : invalid ? "Check this batch's units and timestamps. Readings and their measurement intervals must be complete, not in the future. Correct the device clock or retry later." : "The data service is temporarily unavailable. Re-import to resume safely.", code: error.code }, { status: error.code === "42501" ? 403 : invalid ? 400 : 503 });
   }
   return Response.json(data);
 }

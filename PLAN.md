@@ -180,7 +180,7 @@ Work strictly in this order. Do not start a milestone until the previous one pas
 | M2 | Ingestion: simulator + CSV + Apple Health importer | Three personas seedable via `npm run seed`; CSV upload round-trips; Apple Health ZIP containing export.xml of ≥200 MB imports through a streaming browser Web Worker without exceeding 512 MB processing memory (test with a generated fixture); API receives bounded normalised batches only and enforces consent/ownership. Dedupe proven by re-importing. |
 | M3 | Analytics engine | Every function in 4.3 has unit tests with fixtures, including edge cases (empty series, single day, gaps, DST change). Daily summaries and baselines recompute on new data. |
 | M4 | Alerts | Rules fire on persona (c); copy matches template; every-minute cron dispatch processes persisted escalation deadlines and summary work; fake-clock tests cover acknowledgement, consent, retries, and overlapping invocations; web push registers in Chrome; email goes out via Resend or console stub. |
-| M5 | Patient UI | Onboarding, Today, History, More all work on a 390-px wide viewport; Lighthouse PWA installable; no horizontal scroll; Playwright golden paths pass (see §6). |
+| M5 | Patient UI | Onboarding, Today, History, More all work on a 390-px wide viewport; Lighthouse PWA installable; no horizontal scroll; golden paths 1–2 pass (see §6 and D009). |
 | M6 | Doctor, caregiver, and guardian side | Doctor portal, sharing scopes, consult flow, chat, clinical summary PDF renders correctly for all three personas. Caregiver invite → accept → read-only view → alert forwarding → revoke all work. Guardian-dependent management, guardian consent flag on summaries/PDFs, and conversion at 18 retaining history all work; dependent cannot revoke guardian authority. |
 | M7 | Device comparison + legal + pharmacy stubs + deploy | Catalog seeded and verified; legal pages live; export and delete work; app deployed to Vercel preview URL (or `npm run build` passes if deploy is unavailable) and smoke-tested on the deployed URL. |
 | M8 | Hardening | Run `/review` on the whole repo; fix every finding that is a real bug; run the full test suite twice; write FINAL_REPORT.md. |
@@ -189,7 +189,9 @@ Work strictly in this order. Do not start a milestone until the previous one pas
 
 ---
 
-## 6. Playwright golden paths (all must pass at every milestone from M5)
+## 6. Playwright golden paths
+
+Founder-approved sequencing (8 September 2026): keep milestone order and gate each path when its features exist. Paths 1–2 must pass at M5; paths 3–4 and 6–7 join at M6; path 5 joins at M7, when all seven must pass. Continue running previously enabled paths and run the full suite twice at M8. See DECISIONS.md D009.
 
 1. New user → onboarding → load sample persona (b) → sees Today with ≥1 insight → opens History → switches to Temp → sees cycle-phase shading.
 2. Persona (c) → sees an "attention" alert on Today → acknowledges it → alert leaves Today and appears in History markers.

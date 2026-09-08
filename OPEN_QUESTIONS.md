@@ -16,3 +16,9 @@
 
 - Live Supabase token redemption, browser sessions, and sign-out have been verified using a generated test link without emailing anyone.
 - Before launch, verify delivery to an authorised recipient and ensure the final app URL and auth callback are allowed in Supabase. The exact deployment URL is not available until deployment. No inbox-delivery claim is made by the token/session test.
+
+## OQ004 — Scheduler and notification launch configuration
+
+- The environment has no cron secret, Resend key or VAPID credentials, and no deployed application URL yet. Configure the same random `CRON_SECRET` in Vercel and restricted Supabase Vault, set the deployed `NEXT_PUBLIC_APP_URL`, then run `npm run cron:setup` and observe successful minute-by-minute HTTP responses. Do not assume a successful pg_cron SQL run means the HTTP handler succeeded.
+- Email uses a privacy-preserving console stub until a verified Resend sender/key are configured. Test real delivery only to an authorised recipient. Sample data always remains stubbed. Monitor failed/exhausted delivery rows before launch.
+- Browser worker registration and local notification tests are separate from server Web Push delivery, which remains a stub. Enabling real push also needs persistent subscriptions, recipient scoping and a configured transport; merely filling VAPID env fields does not enable it. SMS/WhatsApp are stubs and no provider accounts were created.

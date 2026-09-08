@@ -7,7 +7,7 @@ const created = () => at("created_at").defaultNow().notNull();
 const json = (name: string) => jsonb(name).$type<Record<string, unknown>>();
 export const profileRole = pgEnum("profile_role", ["patient", "doctor", "admin"]);
 export const profileKind = pgEnum("profile_kind", ["self", "dependent"]);
-export const consentType = pgEnum("consent_type", ["data_ingestion", "doctor_sharing", "marketing"]);
+export const consentType = pgEnum("consent_type", ["data_ingestion", "doctor_sharing", "marketing", "alert_email", "emergency_contact"]);
 export const consentAuthority = pgEnum("consent_authority", ["self", "guardian"]);
 export const provider = pgEnum("provider", ["simulator", "apple_health_export", "fitbit_export", "garmin_export", "generic_csv", "fitbit_api", "aggregator"]);
 export const metricType = pgEnum("metric_type", ["heart_rate", "resting_heart_rate", "hrv_rmssd", "spo2", "skin_temperature", "respiratory_rate", "steps", "active_calories", "total_calories", "sleep_stage", "sleep_duration", "stress_score", "weight_kg", "body_fat_pct", "blood_pressure_systolic", "blood_pressure_diastolic", "blood_glucose", "vo2max", "menstrual_flow", "basal_body_temperature"]);
@@ -48,7 +48,7 @@ export const summaryJobs = pgTable("summary_jobs", {
 export const metrics = pgTable("metrics", {
   id: id(), userId: patient(), sourceId: uuid("source_id").notNull(), metricType: metricType("metric_type").notNull(),
   value: numeric("value").notNull(), unit: text("unit").notNull(), recordedAt: at("recorded_at").notNull(),
-  durationS: integer("duration_s"), quality: quality("quality").default("raw").notNull(), externalId: text("external_id"),
+  durationS: integer("duration_s"), atRest: boolean("at_rest"), quality: quality("quality").default("raw").notNull(), externalId: text("external_id"),
 }, t => [
   uniqueIndex("metrics_dedupe").on(t.userId, t.metricType, t.recordedAt, t.sourceId),
   index("metrics_source_idx").on(t.sourceId), index("metrics_timeline_idx").on(t.userId, t.recordedAt),
@@ -76,10 +76,11 @@ export const baselines = pgTable("baselines", {
 
 export const alertRules = pgTable("alert_rules", {
   id: id(), userId: uuid("user_id").references(() => profiles.id, { onDelete: "cascade" }),
+  ruleKey: text("rule_key").default(sql`gen_random_uuid()::text`).notNull(),
   metricType: metricType("metric_type").notNull(), comparator: text("comparator").notNull(),
   thresholdType: text("threshold_type").notNull(), value: numeric("value").notNull(),
   minDurationS: integer("min_duration_s").default(0).notNull(), severity: severity("severity").notNull(), enabled: boolean("enabled").default(true).notNull(),
-}, t => [index("rules_user_idx").on(t.userId), check("rule_threshold_type", sql`${t.thresholdType} IN ('absolute', 'baseline_deviation')`),
+}, t => [index("rules_user_idx").on(t.userId), uniqueIndex("rules_user_key").on(t.userId, t.ruleKey), uniqueIndex("rules_system_key").on(t.ruleKey).where(sql`${t.userId} IS NULL`), check("rule_threshold_type", sql`${t.thresholdType} IN ('absolute', 'baseline_deviation')`),
   check("rule_comparator", sql`${t.comparator} IN ('lt', 'lte', 'gt', 'gte')`), check("rule_duration", sql`${t.minDurationS} >= 0`)]).enableRLS();
 
 export const alerts = pgTable("alerts", {
@@ -87,7 +88,24 @@ export const alerts = pgTable("alerts", {
   metricSnapshot: json("metric_snapshot").notNull(), severity: severity("severity").notNull(),
   firedAt: at("fired_at").defaultNow().notNull(), acknowledgedAt: at("acknowledged_at"),
   escalatedToContactAt: at("escalated_to_contact_at"), escalatedToDoctorAt: at("escalated_to_doctor_at"),
-}, t => [index("alerts_user_time_idx").on(t.userId, t.firedAt), index("alerts_rule_idx").on(t.ruleId)]).enableRLS();
+  eventStart: at("event_start"), eventEnd: at("event_end"), sourceId: uuid("source_id").references(() => dataSources.id, { onDelete: "cascade" }),
+  escalationDueAt: at("escalation_due_at"), escalationProcessedAt: at("escalation_processed_at"),
+  isSample: boolean("is_sample").default(false).notNull(), isHistorical: boolean("is_historical").default(false).notNull(),
+}, t => [index("alerts_user_time_idx").on(t.userId, t.firedAt), index("alerts_rule_idx").on(t.ruleId), index("alerts_source_idx").on(t.sourceId),
+  index("alerts_due_idx").on(t.escalationDueAt).where(sql`${t.escalationProcessedAt} IS NULL AND ${t.acknowledgedAt} IS NULL`)]).enableRLS();
+
+export const alertDeliveries = pgTable("alert_deliveries", {
+  id: id(), userId: patient(), alertId: uuid("alert_id").notNull().references(() => alerts.id, { onDelete: "cascade" }),
+  recipientKind: text("recipient_kind").notNull(), recipientKey: text("recipient_key").notNull(),
+  channel: text("channel").default("email").notNull(), status: text("status").default("pending").notNull(),
+  availableAt: at("available_at").defaultNow().notNull(), lockedUntil: at("locked_until"), leaseToken: uuid("lease_token"),
+  attempts: integer("attempts").default(0).notNull(), lastError: text("last_error"), firstAttemptAt: at("first_attempt_at"),
+  payload: json("payload"), deliveredAt: at("delivered_at"), createdAt: created(),
+}, t => [uniqueIndex("delivery_alert_recipient").on(t.alertId, t.recipientKind, t.recipientKey, t.channel), index("delivery_subject_idx").on(t.userId),
+  index("delivery_due_idx").on(t.availableAt).where(sql`${t.status} = 'pending'`),
+  check("delivery_kind", sql`${t.recipientKind} IN ('owner','caregiver','contact')`),
+  check("delivery_status", sql`${t.status} IN ('pending','sent','stubbed','cancelled','failed')`),
+  check("delivery_channel", sql`${t.channel} IN ('email','push')`)]).enableRLS();
 
 export const insights = pgTable("insights", {
   id: id(), userId: patient(), category: text("category").notNull(), title: text("title").notNull(), body: text("body").notNull(),

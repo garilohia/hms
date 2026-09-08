@@ -5,6 +5,9 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 import { normaliseApple } from "../../src/lib/ingestion/apple-normalise";
 import { PostgresSummaryStore } from "../../src/lib/jobs/summary-store";
 import { runSummaryJobs } from "../../src/lib/jobs/summary-runner";
+import { PostgresDeliveryStore } from "../../src/lib/alerts/delivery-store";
+import { dispatchAlerts } from "../../src/lib/alerts/dispatch";
+import { defaultRules } from "../../src/lib/alerts/rules";
 
 if (!process.env.DATABASE_URL) throw new Error("DATABASE_URL is required for database verification.");
 const db = postgres(process.env.DATABASE_URL, { max: 1, prepare: false, connect_timeout: 10, onnotice() {} });
@@ -63,9 +66,9 @@ describe("real Postgres: migrations, authentication guard, RLS and audited acces
     if (cx) { await q("ROLLBACK"); cx.release(); }
     await db.end();
   });
-  it("migrates all 20 required/supporting tables from scratch with RLS", async () => {
+  it("migrates all 21 required/supporting tables from scratch with RLS", async () => {
     const tables=await q("select relname,relrowsecurity from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname=$1 and c.relkind='r'",[schema]);
-    expect(tables).toHaveLength(20);
+    expect(tables).toHaveLength(21);
     expect(tables.every(t => t.relrowsecurity)).toBe(true);
   });
   it("permits A to see their metric but B cannot read A's data", async () => {
@@ -157,7 +160,7 @@ describe("real Postgres: migrations, authentication guard, RLS and audited acces
     const [row] = await q("select " + fn("connect_source") + "($1,'apple_health_export','Apple Health') as id",[subject]);
     return row.id as string;
   }
-  const batch = normaliseApple({ type: "HKQuantityTypeIdentifierHeartRate", value: "70", unit: "count/min", startDate: "2026-09-08 23:00:00 +0530", endDate: "2026-09-09 01:00:00 +0530", sourceName: "Sample watch" });
+  const batch = normaliseApple({ type: "HKQuantityTypeIdentifierHeartRate", value: "70", unit: "count/min", startDate: "2026-08-08 23:00:00 +0530", endDate: "2026-08-09 01:00:00 +0530", sourceName: "Sample watch" });
   const ingest = (subject: string, sourceId: string, data: unknown = batch) => q("select " + fn("ingest_batch") + "($1,$2,$3::text::jsonb) as result", [subject, sourceId, JSON.stringify(data)]);
   it("persists bounded metrics, keeps source IDs stable and deduplicates re-imports", async () => {
     await actAs(actors.alice);
@@ -169,7 +172,7 @@ describe("real Postgres: migrations, authentication guard, RLS and audited acces
     expect((await ingest(subjects.alice,id,[{ ...batch[0], device: "Second sample watch" }]))[0].result.inserted).toBe(1);
     await owner();
     const jobs = await q("select day::text,revision from " + t("summary_jobs") + " where user_id=$1 order by day", [subjects.alice]);
-    expect(jobs.map(j => j.day)).toEqual(["2026-09-08", "2026-09-09"]);
+    expect(jobs.map(j => j.day)).toEqual(["2026-08-08", "2026-08-09"]);
     expect(jobs.every(j => j.revision === 2)).toBe(true);
     // Adapters only queue work; the existing summary is unchanged until M3.
     expect((await q("select * from " + t("daily_summaries") + " where user_id=$1", [subjects.alice]))).toHaveLength(1);
@@ -204,6 +207,8 @@ describe("real Postgres: migrations, authentication guard, RLS and audited acces
     ["non-numeric value", [{ ...batch[0], value: "NaN" }]],
     ["fractional duration", [{ ...batch[0], duration_s: 2.5 }]],
     ["huge device name", [{ ...batch[0], device: "x".repeat(300) }]],
+    ["future timestamp", [{ ...batch[0], recorded_at: "2099-01-01T00:00:00Z" }]],
+    ["unfinished measurement interval", [{ ...batch[0], recorded_at: new Date(Date.now() - 3600000).toISOString(), duration_s: 7200 }]],
   ])("rejects %s at the database boundary, bypassing the Next API", async (_name, invalid) => {
     await actAs(actors.alice); const id = await connect();
     await expect(ingest(subjects.alice,id,invalid)).rejects.toMatchObject({ code: "22023" });
@@ -269,5 +274,138 @@ describe("real Postgres: migrations, authentication guard, RLS and audited acces
     expect(await store.process(retry, clock)).toBe("withheld");
     expect(await store.claim(new Date(clock.getTime() + 500000))).toBeNull();
     expect(await q("select * from " + t("summary_jobs") + " where id=$1 and revision>processed_revision", [retry.id])).toHaveLength(1);
+  });
+
+  function deliveryStore() {
+    return new PostgresDeliveryStore(cx, { schema, transaction: async work => {
+      const point = "delivery_" + randomUUID().replaceAll("-", "");
+      await q("SAVEPOINT " + point);
+      try { const result = await work(cx); await q("RELEASE SAVEPOINT " + point); return result; }
+      catch (error) { await q("ROLLBACK TO SAVEPOINT " + point); await q("RELEASE SAVEPOINT " + point); throw error; }
+    } });
+  }
+  async function urgentFixture() {
+    const now = new Date(Date.now() + 1000);
+    await q("update " + t("profiles") + " set timezone='UTC' where id=$1", [subjects.alice]);
+    await actAs(actors.alice); const id = await connect();
+    const rows = Array.from({ length: 35 }, (_, minute) => ({ metric_type: "spo2", value: minute < 12 ? 88 : 91, unit: "%", recorded_at: new Date(now.getTime() - 3600000 + minute * 60000).toISOString(), duration_s: 60, quality: "raw", external_id: null }));
+    await ingest(subjects.alice, id, rows); await owner();
+    const result = await runSummaryJobs(summaryStore(), { limit: 3, clock: () => now });
+    expect(result.failed).toBe(0);
+    const alerts = await q("select * from " + t("alerts") + " where user_id=$1 order by severity", [subjects.alice]);
+    expect(alerts).toHaveLength(2);
+    const urgent = alerts.find(a => a.severity === "urgent")!;
+    // This fixture tests escalation only; patient email is covered separately.
+    await q("delete from " + t("alert_deliveries") + " where user_id=$1", [subjects.alice]);
+    await q("update " + t("profiles") + " set emergency_contact=$2::text::jsonb where id=$1", [subjects.alice, JSON.stringify({ name: "Sample contact", email: "hms-contact@example.invalid" })]);
+    await actAs(actors.alice);
+    await q("select " + fn("record_consent") + "($1,'emergency_contact',true,'test',$2)", [subjects.alice, hash]);
+    await owner();
+    return { now, urgent };
+  }
+  it("persists all recommended defaults exactly and accepts explicit resting context", async () => {
+    const rules = await q("select * from " + t("alert_rules") + " where user_id is null order by id");
+    expect(rules.map(r => [r.id,r.rule_key,r.metric_type,r.comparator,r.threshold_type,Number(r.value),r.min_duration_s,r.severity,r.enabled])).toEqual(defaultRules.map(r => [r.id,r.rule_key,r.metric_type,r.comparator,r.threshold_type,r.value,r.min_duration_s,r.severity,r.enabled]));
+    await actAs(actors.alice); const id = await connect();
+    await ingest(subjects.alice, id, [{ ...analyticsMetric(1, "heart_rate", 160, "bpm"), at_rest: true, duration_s: 300 }]);
+    const [row] = await q("select at_rest from " + t("metrics") + " where user_id=$1 and value=160", [subjects.alice]);
+    expect(row.at_rest).toBe(true);
+  });
+  it("keeps repeated computations idempotent and the 15-minute deadline persisted", async () => {
+    const { now, urgent } = await urgentFixture();
+    expect(new Date(urgent.escalation_due_at).getTime()).toBe(now.getTime() + 900000);
+    expect(urgent.metric_snapshot.body).toMatch(/^Unusual reading: SpO2 was 88 % at /);
+    expect(urgent.metric_snapshot.body).toContain("That's outside your normal range. If you feel unwell, call 112 or contact your doctor.");
+    await q("update " + t("summary_jobs") + " set revision=revision+1 where user_id=$1", [subjects.alice]);
+    expect((await runSummaryJobs(summaryStore(), { limit: 3, clock: () => now })).failed).toBe(0);
+    expect(await q("select * from " + t("alerts") + " where user_id=$1", [subjects.alice])).toHaveLength(2);
+    const store = deliveryStore();
+    expect(await store.escalate(new Date(now.getTime() + 899999))).toBe(0);
+    expect(await store.escalate(new Date(now.getTime() + 900000))).toBe(1);
+    expect(await deliveryStore().escalate(new Date(now.getTime() + 900000))).toBe(0);
+    expect(await q("select * from " + t("alert_deliveries") + " where recipient_kind='contact'")).toHaveLength(1);
+  });
+  it("withholds an escalation when acknowledgement arrives after the claim", async () => {
+    const { now, urgent } = await urgentFixture(), clock = new Date(now.getTime() + 900000);
+    const store = deliveryStore(); await store.escalate(clock);
+    const job = (await store.claim(clock))!; expect(job).not.toBeNull();
+    expect(await deliveryStore().claim(clock)).toBeNull();
+    await actAs(actors.alice);
+    await q("select " + fn("alert_settings") + "($1,'acknowledge',$2::text::jsonb)", [subjects.alice, JSON.stringify({ alertId: urgent.id })]);
+    await owner(); expect(await store.prepare(job, clock)).toBeNull();
+    expect((await q("select status from " + t("alert_deliveries") + " where id=$1", [job.id]))[0].status).toBe("cancelled");
+  });
+  it("rechecks consent withdrawal after claim and does not deliver", async () => {
+    const { now } = await urgentFixture(), clock = new Date(now.getTime() + 900000);
+    const store = deliveryStore(); await store.escalate(clock); const job = (await store.claim(clock))!;
+    await actAs(actors.alice); await q("select " + fn("record_consent") + "($1,'emergency_contact',false,'test',$2)", [subjects.alice, hash]); await owner();
+    expect(await store.prepare(job, clock)).toBeNull();
+    expect(await store.claim(new Date(clock.getTime() + 500000))).toBeNull();
+  });
+  it("retries failures, fences old leases and prevents overlapping sends", async () => {
+    const { now, urgent } = await urgentFixture(); let clock = new Date(now.getTime() + 900000);
+    const store = deliveryStore(); await store.escalate(clock); const first = (await store.claim(clock))!;
+    clock = new Date(clock.getTime() + 121000);
+    const reclaimed = (await deliveryStore().claim(clock))!;
+    expect(reclaimed.token).not.toBe(first.token); expect(await store.prepare(first, clock)).toBeNull();
+    const payload = await store.prepare(reclaimed, clock); expect(payload?.to).toBe("hms-contact@example.invalid");
+    await store.retry(reclaimed, clock, "EmailHTTP503"); expect(await store.claim(clock)).toBeNull();
+    clock = new Date(clock.getTime() + 121000);
+    let sends = 0;
+    const transport = { async send() {
+      sends++;
+      // A second invocation starts while the first provider call is in flight.
+      const overlap = await dispatchAlerts(deliveryStore(), { async send() { throw new Error("DuplicateSend"); } }, { clock: () => clock });
+      expect(overlap.sent + overlap.stubbed + overlap.failed).toBe(0);
+      return "stubbed" as const;
+    } };
+    const result = await dispatchAlerts(store, transport, { clock: () => clock });
+    expect(result.stubbed).toBe(1); expect(sends).toBe(1);
+    expect((await dispatchAlerts(store, transport, { clock: () => clock })).stubbed).toBe(0);
+    expect((await q("select escalated_to_contact_at from " + t("alerts") + " where id=$1", [urgent.id]))[0].escalated_to_contact_at).toBeNull();
+  });
+  it("keeps old imported alerts in history without sending or escalating", async () => {
+    await actAs(actors.alice); const id = await connect();
+    await ingest(subjects.alice, id, [{ ...analyticsMetric(1, "blood_pressure_systolic", 181, "mmHg"), quality: "user_entered" }]);
+    await owner(); expect((await runSummaryJobs(summaryStore(), { limit: 3 })).failed).toBe(0);
+    const [alert] = await q("select is_historical,escalation_due_at from " + t("alerts") + " where user_id=$1", [subjects.alice]);
+    expect(alert).toMatchObject({ is_historical: true, escalation_due_at: null });
+    expect(await q("select * from " + t("alert_deliveries"))).toHaveLength(0);
+  });
+  it("does not expose delivery payloads or permit another user to acknowledge", async () => {
+    const { urgent } = await urgentFixture(); await actAs(actors.bob);
+    await expect(q("select " + fn("alert_settings") + "($1,'acknowledge',$2::text::jsonb)", [subjects.alice, JSON.stringify({ alertId: urgent.id })])).rejects.toMatchObject({ code: "42501" });
+  });
+  it("hides the outbox from authenticated Data API callers", async () => {
+    await actAs(actors.alice); await expect(q("select * from " + t("alert_deliveries"))).rejects.toMatchObject({ code: "42501" });
+  });
+  it("cancels contact delivery after the provider idempotency window without sending again", async () => {
+    const { now } = await urgentFixture(), clock = new Date(now.getTime() + 900000);
+    const store = deliveryStore(); await store.escalate(clock); await store.claim(clock);
+    const later = new Date(clock.getTime() + 23 * 3600000), job = (await store.claim(later))!;
+    expect(await store.prepare(job, later)).toBeNull();
+    expect((await q("select status,last_error from " + t("alert_deliveries") + " where id=$1", [job.id]))[0]).toMatchObject({ status: "failed", last_error: "IdempotencyWindowExpired" });
+  });
+  it("forwards only to consented caregivers and rechecks link revocation", async () => {
+    const { now, urgent } = await urgentFixture();
+    await q("update auth.users set email_confirmed_at=now() where id=$1", [actors.bob]);
+    await q("insert into " + t("caregiver_links") + "(patient_id,caregiver_id,role,status,granted_scopes,invited_by) values($1,$2,'caregiver','active',array['summary_only','alerts']::" + t("sharing_scope") + "[],'patient')", [subjects.alice, actors.bob]);
+    await actAs(actors.bob); await q("select " + fn("record_consent") + "($1,'alert_email',true,'test',$2)", [subjects.bob, hash]); await owner();
+    await q("insert into " + t("alert_deliveries") + "(user_id,alert_id,recipient_kind,recipient_key,available_at) values($1,$2,'caregiver',$3,$4)", [subjects.alice, urgent.id, actors.bob, now.toISOString()]);
+    const store = deliveryStore(), job = (await store.claim(now))!;
+    expect((await store.prepare(job, now))?.to).toContain(actors.bob);
+    await q("update " + t("caregiver_links") + " set status='revoked',revoked_at=now() where patient_id=$1 and caregiver_id=$2", [subjects.alice, actors.bob]);
+    expect(await store.prepare(job, now)).toBeNull();
+    expect(await q("select * from " + t("audit_log") + " where action='system_notification_read' and metadata->>'recipient_actor'=$1", [actors.bob])).toHaveLength(1);
+  });
+  it("allows owner threshold overrides and clears consent when the contact changes", async () => {
+    await actAs(actors.alice);
+    await q("select " + fn("alert_settings") + "($1,'rule',$2::text::jsonb)", [subjects.alice, JSON.stringify({ key: "spo2-urgent", value: 89, duration: 900, enabled: false })]);
+    const [read] = await q("select " + fn("alert_settings") + "($1,'read') as settings", [subjects.alice]);
+    expect(read.settings.rules.find((r: { rule_key: string }) => r.rule_key === "spo2-urgent")).toMatchObject({ value: 89, min_duration_s: 900, enabled: false });
+    await q("select " + fn("record_consent") + "($1,'emergency_contact',true,'test',$2)", [subjects.alice, hash]);
+    await q("select " + fn("alert_settings") + "($1,'contact',$2::text::jsonb)", [subjects.alice, JSON.stringify({ name: "Sample", email: "other@example.invalid" })]);
+    const [changed] = await q("select " + fn("alert_settings") + "($1,'read') as settings", [subjects.alice]);
+    expect(changed.settings.consents).not.toContain("emergency_contact");
   });
 });

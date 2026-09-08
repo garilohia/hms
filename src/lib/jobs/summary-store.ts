@@ -5,6 +5,7 @@ import { dailySummary, deriveHistory, periodsFromFlows, type DailySummary, type 
 import { addDays, dayBounds, localDay } from "../analytics/time";
 import { metricTypes } from "../ingestion/model";
 import type { SummaryJob, SummaryJobStore } from "./summary-runner";
+import { persistAlerts } from "../alerts/persist";
 
 type Executor = Pick<postgres.Sql, "unsafe">;
 type Transaction = <T>(work: (tx: Executor) => Promise<T>) => Promise<T>;
@@ -15,7 +16,7 @@ const summaryParser = z.object({
   source_ids: z.partialRecord(z.enum(metricTypes), z.string()), metric_values: z.partialRecord(z.enum(metricTypes), z.number()),
 });
 const metricParser = z.object({ metric_type: z.enum(metricTypes), value: numeric.refine(v => v !== null), unit: z.string(), recorded_at: z.coerce.date().transform(d => d.toISOString()),
-  duration_s: z.number().nullable(), quality: z.enum(["raw", "derived", "user_entered"]), source_id: z.uuid(), is_sample: z.boolean() });
+  duration_s: z.number().nullable(), at_rest: z.boolean().nullable(), quality: z.enum(["raw", "derived", "user_entered"]), source_id: z.uuid(), is_sample: z.boolean() });
 
 export class PostgresSummaryStore implements SummaryJobStore {
   private transaction: Transaction;
@@ -46,7 +47,7 @@ export class PostgresSummaryStore implements SummaryJobStore {
       await tx.unsafe("SET LOCAL statement_timeout='45s'");
       // Match ingestion's profile -> job lock order. Claims commit their short
       // transaction before this step, avoiding a profile/job deadlock.
-      const [profile] = await tx.unsafe("select timezone from " + t("profiles") + " where id=$1 for update", [job.userId]);
+      const [profile] = await tx.unsafe("select id,timezone,local_emergency_number,owner_account_id from " + t("profiles") + " where id=$1 for update", [job.userId]);
       if (!profile) return "stale";
       const [current] = await tx.unsafe("select revision from " + t("summary_jobs") + " where id=$1 and lease_token=$2 for update", [job.id, job.token]);
       if (!current) return "stale";
@@ -62,7 +63,7 @@ export class PostgresSummaryStore implements SummaryJobStore {
       const work = [{ id: job.id, day: job.day, revision: Number(current.revision) }, ...extra.map(j => ({ id: String(j.id), day: String(j.day), revision: Number(j.revision) }))].sort((a, b) => a.day.localeCompare(b.day));
       const timezone = String(profile.timezone), bounds = { start: dayBounds(work[0].day, timezone).start, end: dayBounds(work.at(-1)!.day, timezone).end };
       // Bounded calendar span plus intervals crossing its first midnight.
-      const raw = await tx.unsafe("select m.metric_type,m.value::text,m.unit,m.recorded_at,m.duration_s,m.quality,m.source_id,(s.provider='simulator') as is_sample from " + t("metrics") + " m join " + t("data_sources") + " s on s.id=m.source_id where m.user_id=$1 and m.recorded_at<$2 and m.recorded_at>=$3 and m.recorded_at+coalesce(m.duration_s,0)*interval '1 second'>=$4 order by m.recorded_at,m.id", [job.userId, new Date(bounds.end), new Date(bounds.start - 604800000), new Date(bounds.start)]);
+      const raw = await tx.unsafe("select m.metric_type,m.value::text,m.unit,m.recorded_at,m.duration_s,m.at_rest,m.quality,m.source_id,(s.provider='simulator') as is_sample from " + t("metrics") + " m join " + t("data_sources") + " s on s.id=m.source_id where m.user_id=$1 and m.recorded_at<$2 and m.recorded_at>=$3 and m.recorded_at+coalesce(m.duration_s,0)*interval '1 second'>=$4 order by m.recorded_at,m.id", [job.userId, new Date(bounds.end), new Date(bounds.start - 604800000), new Date(bounds.start - 86400000)]);
       const metrics: Metric[] = raw.map(row => metricParser.parse(row));
       const days = work.map(j => dailySummary(metrics, { day: j.day, timezone }));
       const previous = await tx.unsafe("select s.*,s.day::text as day from " + t("daily_summaries") + " s where s.user_id=$1 order by s.day", [job.userId]);
@@ -74,6 +75,7 @@ export class PostgresSummaryStore implements SummaryJobStore {
       const imported = periodsFromFlows(flow.map(r => ({ day: localDay(r.recorded_at instanceof Date ? r.recorded_at.getTime() : String(r.recorded_at), timezone), value: Number(r.value) })));
       const periods: PeriodLog[] = [...new Map([...imported, ...manual].map(p => [p.start, p])).values()];
       const derived = deriveHistory(summaries, periods);
+      await persistAlerts(tx, t, { id: job.userId, timezone, local_emergency_number: String(profile.local_emergency_number), owner_account_id: String(profile.owner_account_id) }, work.map(j => j.day), metrics, summaries, now);
       const fields = [...numericFields, "contains_sample", "source_ids", "metric_values", "recovery_evidence"];
       const jsonFields = ["source_ids", "metric_values", "recovery_evidence"];
       // A historical change affects its own row and the following 28 baselines.

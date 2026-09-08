@@ -1,6 +1,6 @@
 import type { MetricType, NormalisedMetric } from "../ingestion/model";
 
-export type Metric = Pick<NormalisedMetric, "metric_type" | "value" | "unit" | "recorded_at" | "duration_s" | "quality"> & { source_id?: string; is_sample?: boolean };
+export type Metric = Pick<NormalisedMetric, "metric_type" | "value" | "unit" | "recorded_at" | "duration_s" | "quality" | "at_rest"> & { source_id?: string; is_sample?: boolean };
 export type DayValue = { day: string; value: number | null };
 export type Baseline = { median: number | null; mad: number | null; n: number };
 export type BaselineSet = Partial<Record<MetricType, Baseline>>;

@@ -24,9 +24,17 @@ Read PLAN.md and AGENTS.md before development. PROGRESS.md records verified mile
 
 ## Analytics jobs
 
-`npm run summaries:recompute` drains durable pending summary work using bounded, retryable batches. `npm run summaries:verify` compares the three seeded profiles' stored summaries, scores, baselines and insights against fresh pure calculations. M4 adds the protected every-minute cron dispatcher; the CLI is the M3 verification path.
+`npm run summaries:recompute` drains durable pending summary work using bounded, retryable batches, including alert evaluation. `npm run summaries:verify` compares the three seeded profiles' stored summaries, scores, baselines and insights against fresh pure calculations.
 
 Sample data covers the last 90 complete days in the selected profile's timezone. The version-2 seed correction regenerates only explicitly marked synthetic profiles with no uploads, documents, consults or manual cycle logs; it refuses to reset profiles containing such data. Missing readings remain missing. Scores require seven prior days of usable inputs. See D007 for formulas, source selection and cycle limitations.
+
+## Alerts and minute-by-minute scheduling
+
+`/more/alerts` manages owner/guardian thresholds, acknowledgement, email consent, contact details/consent and the local browser notification test. Server push, SMS and WhatsApp are explicit stubs. No real email is sent without configured Resend credentials/sender; sample notifications always use a privacy-preserving console stub. Never rely on these notices for emergencies.
+
+After deployment, set a random `CRON_SECRET` of at least 32 characters in the server environment, set `NEXT_PUBLIC_APP_URL` to the deployed HTTPS origin, and run `npm run cron:setup` with the same private values. It schedules Supabase `pg_cron`/`pg_net` every minute using restricted Vault secrets. It refuses localhost and exposed Vault permissions. Check `cron.job_run_details` and the matching HTTP status in `net._http_response`; SQL scheduling success alone does not prove HTTP success. The protected endpoint supports both POST and GET. Do not run both schedulers. `docs/cron-vercel.example.json` is a fallback only if the existing Vercel plan supports one-minute cadence; never silently reduce cadence or buy a plan.
+
+`npm run build && npm run alerts:verify` uses a separate, ephemeral local cron secret, disables real email, verifies synthetic live alerts/acknowledgement and the Chrome worker at 390 px, and removes its synthetic account/data. Unit/database tests use controlled clocks for the 15-minute deadline, acknowledgement/consent races, expired leases, caregiver revocation and overlapping dispatches. Inspect pending/failed `alert_deliveries` and `summary_jobs` operationally; retries are bounded. Missing deployment/notification configuration is tracked in OQ004.
 
 ## Database and authentication checks
 
