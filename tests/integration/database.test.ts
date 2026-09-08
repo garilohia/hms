@@ -19,7 +19,7 @@ const actors = { alice: randomUUID(), bob: randomUUID(), doctor: randomUUID(), g
 const subjects: Record<string, string> = {};
 const source = randomUUID();
 const hash = "0".repeat(64);
-const q = (query: string, values: (string | number | null)[] = []) => cx.unsafe(query, values);
+const q = (query: string, values: (string | number | boolean | null)[] = []) => cx.unsafe(query, values);
 const t = (name: string) => '"' + schema + '".' + name;
 const fn = (name: string) => t("hms_" + name);
 async function actAs(actor: string) {
@@ -40,6 +40,7 @@ describe("real Postgres: migrations, authentication guard, RLS and audited acces
         .replaceAll('"public".', '"' + schema + '".')
         .replaceAll("public.", schema + ".")
         .replaceAll("hms_private", privateSchema)
+        .replaceAll("hms_documents_routes_only", "hms_documents_" + suffix)
         .replaceAll("hms_auth_user_created", "hms_auth_" + suffix);
       for (const statement of ddl.split("--> statement-breakpoint")) {
         if (statement.trim()) await q(statement);
@@ -66,9 +67,9 @@ describe("real Postgres: migrations, authentication guard, RLS and audited acces
     if (cx) { await q("ROLLBACK"); cx.release(); }
     await db.end();
   });
-  it("migrates all 22 required/supporting tables from scratch with RLS", async () => {
+  it("migrates all 23 required/supporting tables from scratch with RLS", async () => {
     const tables=await q("select relname,relrowsecurity from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname=$1 and c.relkind='r'",[schema]);
-    expect(tables).toHaveLength(22);
+    expect(tables).toHaveLength(23);
     expect(tables.every(t => t.relrowsecurity)).toBe(true);
   });
   it("permits A to see their metric but B cannot read A's data", async () => {
@@ -76,6 +77,67 @@ describe("real Postgres: migrations, authentication guard, RLS and audited acces
     expect(await q("select * from " + t("metrics"))).toHaveLength(1);
     await actAs(actors.bob);
     expect(await q("select * from " + t("metrics"))).toHaveLength(0);
+  });
+  it("allows anonymous catalogue reads but no catalogue insertion", async () => {
+    await q("insert into " + t("device_catalog") + "(brand,model,category,metrics_supported,source_urls,editorial_note) values('Test','Public device','watch',array['heart_rate']::" + t("metric_type") + "[],array['https://example.invalid'],'Synthetic catalogue fixture')");
+    await q("SET LOCAL ROLE anon");
+    expect(await q("select model from " + t("device_catalog"))).toHaveLength(1);
+    await expect(q("insert into " + t("device_catalog") + "(brand,model,category,metrics_supported,source_urls,editorial_note) values('Bad','Untrusted','watch',array['heart_rate']::" + t("metric_type") + "[],array['https://example.invalid'],'Untrusted')")).rejects.toMatchObject({ code: "42501" });
+  });
+  it("does not let a signed-in patient change reference-device prices", async () => {
+    await actAs(actors.alice);
+    await expect(q("update " + t("device_catalog") + " set price_inr=0")).rejects.toMatchObject({ code: "42501" });
+  });
+  async function beginDeletion(actor:string,confirmDependents=false) {
+    await actAs(actor);return (await q("select "+fn("begin_account_deletion")+"($1) as d",[confirmDependents]))[0].d;
+  }
+  async function finishDeletion() {await owner();await q('select "'+privateSchema+'".finish_account_deletion()');}
+  it("fences a deleting account and keeps status/retry available without exposing its table",async()=>{
+    const d=await beginDeletion(actors.alice);expect(d.profile_ids).toEqual([subjects.alice]);expect(d.stage).toBe("pending");
+    expect(await q("select * from "+t("metrics"))).toHaveLength(0);
+    const [status]=await q("select "+fn("account_deletion_status")+"() as s");expect(status.s).toEqual({pending:true,stage:"pending",profile_count:1});
+    expect((await beginDeletion(actors.alice)).started_at).toBe(d.started_at);
+    await expect(q("select * from "+t("account_deletions"))).rejects.toMatchObject({code:"42501"});
+  });
+  it("requires a separate confirmation when deletion includes owned dependents",async()=>{
+    await actAs(actors.guardian);await q("select "+fn("create_dependent")+"('Sample child','2015-01-01','test',$1)",[hash]);
+    await expect(beginDeletion(actors.guardian,false)).rejects.toMatchObject({code:"23514"});
+  });
+  it("keeps mandatory guardianship valid until the dependent is actually purged",async()=>{
+    await actAs(actors.guardian);const [child]=await q("select "+fn("create_dependent")+"('Sample child','2015-01-01','test',$1) as id",[hash]);
+    const d=await beginDeletion(actors.guardian,true);expect(d.profile_ids).toContain(child.id);await owner();await q("SET CONSTRAINTS ALL IMMEDIATE");
+    const [guardian]=await q("select status from "+t("caregiver_links")+" where patient_id=$1 and role='guardian'",[child.id]);expect(guardian.status).toBe("active");
+    await actAs(actors.guardian);await expect(q("select "+fn("create_dependent")+"('Another child','2015-01-01','test',$1)",[hash])).rejects.toMatchObject({code:"42501"});
+  });
+  it("does not expose health-purge authority to authenticated clients",async()=>{
+    await beginDeletion(actors.alice);await expect(q('select "'+privateSchema+'".finish_account_deletion()')).rejects.toMatchObject({code:"42501"});
+  });
+  it("refuses a health purge until the server has finished Storage removal",async()=>{
+    await beginDeletion(actors.alice);await expect(finishDeletion()).rejects.toMatchObject({code:"42501"});
+  });
+  it("purges only owned profiles, anonymises audit rows and keeps a retry fence until Auth deletion",async()=>{
+    await q("insert into "+t("audit_log")+"(actor_id,action,target_user_id,target_table,target_id,metadata) values($1,'doctor_read',$2,'metrics',$3,jsonb_build_object('subject',$2::uuid::text))",[actors.doctor,subjects.alice,source]);
+    await beginDeletion(actors.alice);await owner();await q("update "+t("account_deletions")+" set stage='storage_removed' where account_id=$1",[actors.alice]);
+    await finishDeletion();await finishDeletion();
+    expect(await q("select id from "+t("profiles")+" where owner_account_id=$1",[actors.alice])).toHaveLength(0);
+    expect(await q("select id from "+t("metrics")+" where user_id=$1",[subjects.alice])).toHaveLength(0);
+    expect(await q("select id from "+t("profiles")+" where id=$1",[subjects.bob])).toHaveLength(1);
+    const [audit]=await q("select actor_id,target_user_id,target_id,metadata from "+t("audit_log")+" where action='doctor_read'");expect(audit).toEqual({actor_id:null,target_user_id:null,target_id:null,metadata:{}});
+    const [intent]=await q("select stage from "+t("account_deletions")+" where account_id=$1",[actors.alice]);expect(intent.stage).toBe("health_removed");
+    expect(await q("select id from auth.users where id=$1",[actors.alice])).toHaveLength(1);
+    await q("delete from auth.users where id=$1",[actors.alice]);expect(await q("select account_id from "+t("account_deletions")+" where account_id=$1",[actors.alice])).toHaveLength(0);
+    await actAs(actors.alice);const [live]=await q('select "'+privateSchema+'".actor_is_live() as live');expect(live.live).toBe(false);
+  });
+  it("doctor deletion preserves another patient's completed note and Sample data provenance",async()=>{
+    await q("update "+t("doctors")+" set is_sample=true where id=$1",[subjects.doctor]);
+    const [consult]=await q("insert into "+t("consults")+"(patient_id,doctor_id,type,status,completed_at,doctor_note) values($1,$2,'trend_review','completed',now(),'Sample preserved note') returning id",[subjects.alice,subjects.doctor]);
+    await q("insert into "+t("messages")+"(consult_id,sender_id,body) values($1,$2,'Sample doctor message')",[consult.id,actors.doctor]);
+    // Historical guardian provenance on a profile now owned by its adult patient.
+    await q("insert into "+t("consents")+"(user_id,granted_by,authority,consent_type,policy_version,ip_hash) values($1,$2,'guardian','data_ingestion','historical-test',$3)",[subjects.alice,actors.doctor,hash]);
+    await beginDeletion(actors.doctor);await owner();await q("update "+t("account_deletions")+" set stage='storage_removed' where account_id=$1",[actors.doctor]);await finishDeletion();
+    await actAs(actors.alice);const [list]=await q("select "+fn("consult_list")+"($1,null,true) as v",[subjects.alice]);expect(list.v.rows[0]).toMatchObject({doctor_id:null,doctor_name:"Former doctor",doctor_note:"Sample preserved note",is_sample:true});
+    const [room]=await q("select "+fn("consult_read")+"($1) as v",[consult.id]);expect(room.v.messages[0].sender_id).toBeNull();expect(room.v.is_sample).toBe(true);
+    const [consent]=await q("select granted_by,authority,ip_hash from "+t("consents")+" where user_id=$1 and authority='guardian'",[subjects.alice]);expect(consent).toEqual({granted_by:null,authority:"guardian",ip_hash:""});
   });
   const care = async (subject:string,action:string,data:Record<string,unknown>) => (await q("select "+fn("care_change")+"($1,$2,$3::text::jsonb) as id",[subject,action,JSON.stringify(data)]))[0].id as string;
   const doctorRegistration={registrationNumber:"TEST-PENDING",council:"Test council",specialities:["General medicine"],languages:["English"],bio:"Sample doctor",feeInr:500,feeUsd:10,available:true};

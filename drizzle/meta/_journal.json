@@ -134,6 +134,34 @@
       "when": 1788836502570,
       "tag": "0018_adult_transfer_operations",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1788838516573,
+      "tag": "0019_data_rights_lifecycle",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1788838619498,
+      "tag": "0020_data_rights_operations",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1788838699851,
+      "tag": "0021_consult_sample_provenance",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1788839587108,
+      "tag": "0022_document_storage_boundary",
+      "breakpoints": true
     }
   ]
 }

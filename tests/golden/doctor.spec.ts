@@ -46,10 +46,11 @@ for(const path of [3,4])test(path===3?"golden 3: summary-only doctor, real PDF a
       await expect(page).toHaveURL(/\/consults\/[a-f0-9-]+$/);const consultUrl=page.url();
       await doctorPage.goto(baseURL+"/doctor");await expect(doctorPage.getByRole("link",{name:label+" patient · trend review · requested",exact:true})).toBeVisible();await doctorPage.goto(consultUrl);
       await doctorPage.getByRole("button",{name:"Accept consult",exact:true}).click();await expect(doctorPage.getByLabel("Message",{exact:true})).toBeVisible();
-      await doctorPage.getByLabel("Message",{exact:true}).fill("Sample doctor message");await doctorPage.getByRole("button",{name:"Send message",exact:true}).click();await expect(doctorPage.getByText("Sample doctor message",{exact:true})).toBeVisible();
-      await page.getByRole("button",{name:"Refresh messages",exact:true}).click();await expect(page.getByText("Sample doctor message",{exact:true})).toBeVisible();
-      await page.getByLabel("Message",{exact:true}).fill("Sample patient reply");await page.getByRole("button",{name:"Send message",exact:true}).click();await expect(page.getByText("Sample patient reply",{exact:true})).toBeVisible();
-      await doctorPage.getByRole("button",{name:"Refresh messages",exact:true}).click();await expect(doctorPage.getByText("Sample patient reply",{exact:true})).toBeVisible();
+      // Match the persisted message bubble, not the same text still in the composer.
+      await doctorPage.getByLabel("Message",{exact:true}).fill("Sample doctor message");await doctorPage.getByRole("button",{name:"Send message",exact:true}).click();await expect(doctorPage.locator(".message-row").getByText("Sample doctor message",{exact:true})).toBeVisible();
+      await page.getByRole("button",{name:"Refresh messages",exact:true}).click();await expect(page.locator(".message-row").getByText("Sample doctor message",{exact:true})).toBeVisible();
+      await page.getByLabel("Message",{exact:true}).fill("Sample patient reply");await page.getByRole("button",{name:"Send message",exact:true}).click();await expect(page.locator(".message-row").getByText("Sample patient reply",{exact:true})).toBeVisible();
+      await doctorPage.getByRole("button",{name:"Refresh messages",exact:true}).click();await expect(doctorPage.locator(".message-row").getByText("Sample patient reply",{exact:true})).toBeVisible();
       await doctorPage.getByLabel("Doctor note",{exact:true}).fill("Sample completed review note.");await doctorPage.getByRole("button",{name:"Close consult",exact:true}).click();await expect(doctorPage.getByText("Sample completed review note.",{exact:true})).toBeVisible();await mobile(doctorPage);
       await page.goto("/history");await expect(page.getByRole("heading",{name:"Consult notes",exact:true})).toBeVisible();await expect(page.getByText("Sample completed review note.",{exact:true})).toBeVisible();await mobile(page);await page.screenshot({path:testInfo.outputPath("completed-note-mobile.png"),fullPage:true});
       const [count]=await db.unsafe("select count(*)::int as n from public.messages where consult_id=$1",[consultUrl.split("/").at(-1)!]);expect(count.n).toBe(2);

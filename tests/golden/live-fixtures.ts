@@ -26,7 +26,7 @@ export function liveFixtures(baseURL:string) {
       await expect(page.getByTestId("today-hero").getByRole("status")).toHaveCount(0,{timeout:30000});
     },
     async cleanup(){
-      for(const id of actors){const result=await admin.auth.admin.deleteUser(id);if(result.error)throw new Error("Synthetic family account cleanup failed.");}
+      for(const id of actors){const exists=await db.unsafe("select 1 from auth.users where id=$1",[id]);if(exists.length){const result=await admin.auth.admin.deleteUser(id);if(result.error)throw new Error("Synthetic family account cleanup failed.");}}
       if(actors.length)await db.unsafe("delete from public.audit_log where actor_id=any($1::uuid[]) or target_user_id=any($2::uuid[])",[actors,subjects]);await db.end();
     },
   };

@@ -30,7 +30,7 @@ export const profiles = pgTable("profiles", {
 
 const patient = () => uuid("user_id").notNull().references(() => profiles.id, { onDelete: "cascade" });
 export const consents = pgTable("consents", {
-  id: id(), userId: patient(), grantedBy: uuid("granted_by").notNull(), authority: consentAuthority("authority").notNull(),
+  id: id(), userId: patient(), grantedBy: uuid("granted_by"), authority: consentAuthority("authority").notNull(),
   consentType: consentType("consent_type").notNull(), grantedAt: at("granted_at").defaultNow().notNull(),
   revokedAt: at("revoked_at"), policyVersion: text("policy_version").notNull(), ipHash: text("ip_hash").notNull(),
 }, t => [index("consents_subject_idx").on(t.userId, t.consentType), index("consents_grantor_idx").on(t.grantedBy), uniqueIndex("consents_active_unique").on(t.userId, t.consentType).where(sql`${t.revokedAt} IS NULL`)]).enableRLS();
@@ -160,23 +160,25 @@ export const profileTransfers = pgTable("profile_transfers", {
 
 export const consults = pgTable("consults", {
   id: id(), patientId: uuid("patient_id").notNull().references(() => profiles.id, { onDelete: "cascade" }),
-  doctorId: uuid("doctor_id").notNull().references(() => doctors.id, { onDelete: "cascade" }),
+  doctorId: uuid("doctor_id").references(() => doctors.id, { onDelete: "set null" }),
   type: text("type").notNull(), status: text("status").default("requested").notNull(), requestedAt: at("requested_at").defaultNow().notNull(),
   scheduledFor: at("scheduled_for"), completedAt: at("completed_at"), patientNote: text("patient_note"), doctorNote: text("doctor_note"),
   attachedSummaryId: uuid("attached_summary_id").references(() => summarySnapshots.id, { onDelete: "set null" }), callUrl: text("call_url"),
+  isSample: boolean("is_sample").default(false).notNull(),
 }, t => [index("consults_patient_idx").on(t.patientId), index("consults_doctor_idx").on(t.doctorId), index("consults_summary_idx").on(t.attachedSummaryId),
   check("consult_type", sql`${t.type} IN ('urgent_review','trend_review','second_opinion','follow_up')`),
   check("consult_status", sql`${t.status} IN ('requested','accepted','scheduled','completed','cancelled')`)]).enableRLS();
 
 export const messages = pgTable("messages", {
   id: id(), consultId: uuid("consult_id").notNull().references(() => consults.id, { onDelete: "cascade" }),
-  senderId: uuid("sender_id").notNull(), body: text("body").notNull(), attachments: text("attachments").array().default([]).notNull(),
+  senderId: uuid("sender_id"), body: text("body").notNull(), attachments: text("attachments").array().default([]).notNull(),
   sentAt: at("sent_at").defaultNow().notNull(), readAt: at("read_at"),
 }, t => [index("messages_consult_idx").on(t.consultId, t.sentAt), index("messages_sender_idx").on(t.senderId)]).enableRLS();
 
 export const documents = pgTable("documents", {
   id: id(), userId: patient(), type: text("type").notNull(), storagePath: text("storage_path").notNull().unique(),
   uploadedAt: at("uploaded_at").defaultNow().notNull(), title: text("title").notNull(), tags: text("tags").array().default([]).notNull(),
+  mimeType: text("mime_type"), sizeBytes: integer("size_bytes"),
 }, t => [index("documents_user_idx").on(t.userId), check("document_type", sql`${t.type} IN ('lab_report','prescription','discharge_summary','other')`)]).enableRLS();
 
 export const deviceCatalog = pgTable("device_catalog", {
@@ -193,3 +195,8 @@ export const auditLog = pgTable("audit_log", {
   id: id(), actorId: uuid("actor_id"), action: text("action").notNull(), targetUserId: uuid("target_user_id"),
   targetTable: text("target_table").notNull(), targetId: uuid("target_id"), at: at("at").defaultNow().notNull(), metadata: json("metadata").default({}).notNull(),
 }, t => [index("audit_subject_time_idx").on(t.targetUserId, t.at), index("audit_actor_idx").on(t.actorId)]).enableRLS();
+
+export const accountDeletions = pgTable("account_deletions", {
+  accountId: uuid("account_id").primaryKey(), profileIds: uuid("profile_ids").array().notNull(),
+  stage: text("stage").default("pending").notNull(), startedAt: at("started_at").defaultNow().notNull(),
+}, t => [check("account_deletion_stage",sql`${t.stage} IN ('pending','storage_removed','health_removed')`)]).enableRLS();

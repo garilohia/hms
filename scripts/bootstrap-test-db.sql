@@ -13,3 +13,11 @@ CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $f$
 $f$;
 GRANT USAGE ON SCHEMA auth TO anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION auth.uid() TO anon, authenticated, service_role;
+
+-- Minimal provider-owned table needed to replay the application's restrictive
+-- document-bucket policy. This does not simulate Storage uploads or object APIs;
+-- those are verified separately against Supabase by the live golden path.
+CREATE SCHEMA storage;
+CREATE TABLE storage.objects (id uuid PRIMARY KEY, bucket_id text NOT NULL, name text NOT NULL);
+ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;
+GRANT USAGE ON SCHEMA storage TO anon, authenticated, service_role;

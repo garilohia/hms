@@ -75,6 +75,9 @@ describe("normalisation and bounded import", () => {
     const parser = new CsvParser(() => {}); parser.write('"unfinished');
     expect(() => parser.close()).toThrow("unfinished");
     expect(() => new CsvParser(() => {}).write("bad,header\n")).toThrow("header");
+    // HMS exports retain provenance columns. Never silently strip them and
+    // reclassify exported simulator rows as real generic-CSV readings.
+    expect(() => new CsvParser(() => {}).write("timestamp,metric_type,value,unit,provider,is_sample\n")).toThrow("exactly four columns");
   });
   it("round-trips CSV template and deduplicates re-imports through normalise", async () => {
     const sink = memoryTransport();

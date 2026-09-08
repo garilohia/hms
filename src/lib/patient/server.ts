@@ -8,6 +8,8 @@ import { localDay } from "../analytics/time";
 export async function ownedProfiles() {
   const session=await authenticatedClient();
   if(!session) redirect("/sign-in");
+  const deletion=await session.client.rpc("hms_account_deletion_status");
+  if(!deletion.error&&z.object({pending:z.boolean()}).parse(deletion.data).pending)redirect("/account/delete");
   const {data,error}=await session.client.rpc("hms_list_profiles");
   if(error) throw new Error("We could not load your profiles.");
   return {session,profiles:z.array(profileSchema).parse(data)};

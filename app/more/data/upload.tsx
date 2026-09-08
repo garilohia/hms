@@ -63,6 +63,7 @@ export function DataImport({ profiles, onBusyChange, onComplete }: { profiles: P
     <label className="flex items-start gap-3"><input className="mt-1" type="checkbox" checked={consent} disabled={busy} onChange={e => setConsent(e.target.checked)} />
       <span>{selected?.kind === "dependent" ? "I give guardian consent to store and process this dependent’s health readings." : "I consent to HMS storing and processing my health readings."} Data is stored in Supabase in India. You can withdraw consent and delete data. This does not give a doctor access.</span>
     </label>
+    <p className="text-sm"><a className="underline" href="/legal/privacy" target="_blank" rel="noreferrer">Read the privacy notice</a>. Guardian consent verification must be approved before using real children’s data.</p>
     <label className="block">Health export<input aria-label="Health export" className="mt-2 block w-full max-w-full rounded border p-3 text-sm" type="file" accept=".zip,.csv" disabled={busy} onChange={e => setFile(e.target.files?.[0])} /></label>
     <label className="block">CSV source name<input className="mt-1 w-full rounded border p-3" maxLength={200} value={key} disabled={busy} onChange={e => setKey(e.target.value)} /></label>
     <p className="text-sm">Use the same source name when re-importing. Use a different name for a different CSV device. <a className="underline" href="/api/ingestion/template">Download CSV template</a>.</p>

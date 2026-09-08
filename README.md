@@ -68,6 +68,20 @@ After deployment, set a random `CRON_SECRET` of at least 32 characters in the se
 
 After migrations, `npm run seed` creates all three labelled 90-day sample personas. Repeat runs deduplicate existing readings. These reserved-domain accounts are fixtures, not delivered logins; signed-in users can load the same sample personas from `/more/data` into their own or guardian-owned profile after giving consent.
 
+The same command seeds the fictional doctor directory and 20 dated device catalogue entries. `npm run seed:devices` updates only those named entries and verifies their public RLS read; it preserves unrelated catalogue rows. `/more/devices` compares source-verified features with currency/budget, battery and screen filters. Unknown prices remain “Check price”; no currency conversion or automatic device integration is implied. Update the row's sources and verification date whenever changing a price/specification. The live catalogue UI test is in `npm run golden:verify`, not the credential-free CI suite.
+
 `/more/data` accepts Apple Health `export.zip` and generic CSV. ZIP/XML stays in a browser Web Worker; only batches of at most 1,000 canonical metrics and 1 MiB reach the server. Keep the tab open. Cancel or retry safely by selecting the same file and source name. Invalid/unsupported records are counted. Apple HRV SDNN is not imported as RMSSD. The CSV template lists timestamp, metric type, value and canonical unit; timestamps must include a UTC offset.
 
 `npm run build && npm run ingestion:verify` checks real CSV persistence and two imports of a generated 210 MiB XML ZIP, including API bounds, deduplication and a 512 MiB renderer-memory ceiling. It needs the supplied Supabase keys/database and Chromium on macOS or Linux (`ps` supplies RSS). Its temporary test account/data are cleaned up. Fixture ZIP and a JSON memory/count report are written under ignored `test-results/`. The sample personas created by `npm run seed` are intentionally retained.
+
+## Documents, data rights and preview legal pages
+
+After migrations, run `npm run storage:setup` once. It creates the private `hms-documents` bucket only if absent and requires the restrictive Storage policy. Existing unexpected bucket settings are reported, not silently changed. History accepts PDF/JPEG/PNG originals up to 3 MiB through owner/guardian routes with ingestion consent. Reads require current owner/full-history permission and are audited. There are no public or durable signed document links.
+
+Your account → Export all owned profiles streams a direct ZIP of CSVs, records and original documents, including owned dependents but never merely linked patients. It preserves sample provenance; this is a record copy, not a backup/restore import format. Account deletion requires typing DELETE plus separate confirmation for dependents. A durable fence freezes new work; files, health rows and identifiers are removed before the Auth account. Success means the operation completed in that request. On an interrupted request, return to `/account/delete` and retry. Provider backups and other patients' retained clinical text are not promised erased; see D014 and OQ007.
+
+Privacy, terms and the health disclaimer are public preview pages. Operator/contact, parental verification, retention and cross-border care requirements need legal review before launch. `/more/pharmacy` prepares manually requested external search links only; Apollo requires re-entering the query. No pharmacy API, orders, prescriptions or insight purchase links exist.
+
+## Deployment status
+
+M7 uses PLAN's production-build fallback because Vercel CLI `whoami` reports logged out (D017). No public URL, temporary deployment or third-party account was created. Before deployment, configure Vercel's existing project with the documented server-only/public environment variables and an appropriate supported Node runtime. Then allow its HTTPS Auth callbacks in Supabase, run the browser smoke tests on that URL and activate the minute scheduler with the matching secret. Legal and real notification prerequisites in OPEN_QUESTIONS.md still apply.

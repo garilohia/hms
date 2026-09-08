@@ -4,6 +4,7 @@ import { z } from "zod";
 import { addDays } from "@/src/lib/analytics/time";
 import { chartMetrics,chartSeries,type ChartMetric } from "@/src/lib/patient/chart";
 import { patientPost,readView,type PatientView,type Summary } from "@/src/lib/patient/model";
+import {DocumentUpload} from "./document-upload";
 const phaseColours:Record<string,string>={menstrual:"#f4c2ca",follicular:"#c0eae0",ovulatory:"#efd695",luteal:"#d9d2f1"};
 export function History({initial,today}:{initial:PatientView;today:string}) {
   const [view,setView]=useState(initial),[metric,setMetric]=useState<ChartMetric>("RHR"),[range,setRange]=useState("90"),[selected,setSelected]=useState<Summary|null>(null),[error,setError]=useState(""),[busy,setBusy]=useState(false);
@@ -71,8 +72,9 @@ export function History({initial,today}:{initial:PatientView;today:string}) {
       {alerts?.alerts?.map(a=><article key={a.id} className="stack border-t border-slate-200 pt-4">{a.is_sample&&<span className="badge">Sample data</span>}<p>{a.metric_snapshot.body}</p><p className="muted">{a.acknowledged_at?"Acknowledged":"Unacknowledged"} · {a.severity}</p></article>)}
       {alerts?.next_cursor&&alertDay&&<button className="button secondary" disabled={busy} onClick={()=>void showAlerts(alertDay,alerts.next_cursor)}>More readings for this day</button>}
     </section>}
-    <section className="card stack"><h2 className="text-lg font-semibold">Documents</h2>{!docs?<p>Loading documents…</p>:docs.documents?.length?docs.documents.map(d=><div key={d.id} className="list-row"><span>{d.title}<span className="block muted">{d.type.replaceAll("_"," ")}</span></span></div>):<p className="muted">No documents added.</p>}
+    <section className="card stack"><h2 className="text-lg font-semibold">Documents</h2>{!docs?<p>Loading documents…</p>:docs.documents?.length?docs.documents.map(d=><div key={d.id} className="list-row"><a href={"/api/documents/"+d.id} className="underline">{d.title}<span className="block muted">{d.type.replaceAll("_"," ")} · Download</span></a></div>):<p className="muted">No documents added.</p>}
       {docs?.next_cursor&&<button className="button secondary" onClick={()=>{void readView(userId,"documents",{cursor:docs.next_cursor}).then(setDocs).catch(()=>setError("Could not load documents. Try again."));}}>More documents</button>}
+      {initial.can_manage&&<DocumentUpload userId={userId} onUploaded={async()=>setDocs(await readView(userId,"documents"))}/>}
     </section>
     {error&&<p role="alert">{error}</p>}
   </div>;

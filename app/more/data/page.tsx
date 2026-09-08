@@ -10,6 +10,11 @@ export default async function DataPage({searchParams}:{searchParams:Promise<{pro
     <p>Import an Apple Health ZIP or a CSV. Your archive stays on this device. Only normalised readings are sent to HMS.</p>
     {view.can_manage?<DataManagement profile={view.profile}/>:<Records userId={view.profile.id} section="sources" />}
     {view.can_manage&&<a className="button secondary" href={"/today?profile="+view.profile.id}>View and refresh Today</a>}
+    {view.can_manage&&<section className="card stack"><h2 className="font-semibold">Your data rights</h2>
+      <p>Export includes all profiles you own, including dependents. It does not include patients linked to you as a doctor or caregiver. Keep the download open until it finishes.</p>
+      <a className="button secondary" href="/api/account/export">Export all owned profiles</a>
+      <a className="underline" href="/account/delete">Delete account and owned profiles</a>
+    </section>}
     <p className="text-sm text-slate-600">Fitbit API and aggregator connections: coming soon.</p>
   </div></AppFrame>;
 }

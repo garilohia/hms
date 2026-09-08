@@ -7,6 +7,8 @@ const profileList = z.array(z.object({ id: z.uuid(), name: z.string(), kind: z.e
 export default async function AccountPage() {
   const session = await authenticatedClient();
   if (!session) redirect("/sign-in");
+  const deletion = await session.client.rpc("hms_account_deletion_status");
+  if (!deletion.error && z.object({ pending: z.boolean() }).parse(deletion.data).pending) redirect("/account/delete");
   const { data, error } = await session.client.rpc("hms_list_profiles");
   if (error) throw new Error("We could not load your profiles.");
   const profiles = profileList.parse(data);
@@ -15,6 +17,8 @@ export default async function AccountPage() {
     <Link href="/today" className="button">Open Today</Link>
     <Link href="/more/data" className="block underline">Devices &amp; data</Link>
     <Link href="/more/alerts" className="block underline">Alert rules and notifications</Link>
+    <a href="/api/account/export" className="block underline">Export all owned profiles</a>
+    <Link href="/account/delete" className="block underline">Delete account</Link>
     <ul className="space-y-3">{profiles.map(p => <li key={p.id} className="rounded-lg border p-4">{p.name}{p.kind === "dependent" && <span className="ml-2 text-sm">Dependent</span>}</li>)}</ul>
     <form method="post" action="/api/auth/sign-out"><button className="rounded-lg border px-4 py-2">Sign out</button></form>
   </main>;

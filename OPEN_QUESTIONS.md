@@ -6,6 +6,7 @@
 - Owner: founder with legal counsel.
 - Needed outcome: an approved method for verifying the consenting adult and their parental/guardian authority, with the evidence, retention, and re-verification requirements needed for implementation.
 - Status: unresolved before launch. Recording a guardian's consent is part of the build, but does not by itself resolve the verification requirement.
+- Review DPDP Act section 9, final Rules 2025 rule 10 and the child-monitoring restrictions/exceptions for HMS specifically. Do not assume an independent wellness/facilitation app qualifies for a healthcare exemption. Official sources: [Act](https://www.meity.gov.in/static/uploads/2024/02/Digital-Personal-Data-Protection-Act-2023.pdf), [Rules](https://www.meity.gov.in/static/uploads/2025/11/53450e6e5dc0bfa85ebd78686cadad39.pdf).
 
 ## OQ002 — Git remote for hosted CI
 
@@ -32,3 +33,10 @@
 
 - Clinical PDFs embed Noto Sans and Noto Sans Devanagari, with Latin/Hindi visual fixtures. Characters outside these fonts' coverage, including emoji, cause an explicit PDF-unavailable response rather than a corrupted clinical document. The complete HTML summary and stored original text remain available.
 - Add and visually verify further script fonts before advertising multilingual PDF support beyond the bundled coverage. No patient text is sent to an external font or translation service.
+
+## OQ007 — Operator, retention, grievances and cross-border care before launch
+
+- Publish the actual operator/legal entity, address, grievance officer or designated contact, working inbox, identity-check and response process. Legal pages intentionally identify these as unresolved, not fake contacts or a compliance certification.
+- Counsel must reconcile the founder-requested live hard-delete behaviour with applicable medical-record retention and DPDP Rules 2025 rule 8(3)/security-log obligations, taking phased commencement and any subsequent notifications/corrigenda into account. Review provider backup/log retention and processors' locations. Do not promise all infrastructure processing stays in India or immediate backup erasure.
+- The preview retains live history until account deletion, anonymises audit identifiers and preserves other patients' consultation text after a doctor deletes their account. Names inside free-text clinical records are not automatically redacted. An approved production retention/redaction policy is still required.
+- Approve correction/nomination/grievance workflows, international patient eligibility and telemedicine requirements, clinician verification, paid-consultation pricing/refunds and final jurisdiction language before public clinical use. No operating entity, cross-border licence, partnership or paid service is inferred by this build.

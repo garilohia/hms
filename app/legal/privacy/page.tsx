@@ -1,0 +1,31 @@
+import Link from "next/link";
+export default function PrivacyPage() {
+  return <main className="onboarding stack"><h1 className="page-title">Privacy notice</h1>
+    <p className="muted">Version 2026-09-08 · HMS development preview</p>
+    <p>This notice describes the current application. The operating entity, grievance contact, retention schedule and launch legal review are not yet finalised. Do not use this preview for real children’s data until parental verification is approved. This page is not a certification of legal compliance.</p>
+    <section className="card stack"><h2>What we collect and why</h2>
+      <p>Account email, name and date of birth support adult sign-in and profile ownership. Optional sex, height, country and home timezone help present personal history. Guardian-created dependent profiles have their own health history and no sign-in account.</p>
+      <p>With processing consent, we store imported readings, timestamps, source-device details, cycle logs and uploaded health documents. We use these to show history, compute daily summaries and personal baselines, and produce explainable trends and unusual-reading notices.</p>
+      <p>Sharing choices, doctor registration details, consultation requests, messages, notes, medication lists and summary snapshots support the care-team workflow. Optional emergency-contact details and notification preferences support alerts you authorise. We keep consent dates, policy versions, guardian authority, a hashed IP reference and access logs for accountability.</p>
+      <p>Apple Health archives and CSVs are parsed in your browser. Only normalised readings are uploaded. Documents you choose are uploaded separately. Sample data is synthetic and labelled. We do not sell health data, use it for advertising or automatically send it to an AI service.</p>
+    </section>
+    <section className="card stack"><h2>Where data goes</h2>
+      <p>The configured Supabase database and private document storage are in Mumbai, India. Supabase also provides authentication. Vercel hosts application functions when deployed. This does not mean every infrastructure log, backup or support operation stays in India; hosting configuration and provider agreements need review before launch.</p>
+      <p>Doctors and caregivers see only the profiles and scopes you grant. We log their reads. Guardians manage dependent profiles with full scope until an authorised adult-account transfer. Doctors see when consent was given by a guardian.</p>
+      <p>If configured, the email provider receives the recipient and notification content required for delivery. The current preview uses a non-delivery stub unless an authorised provider is configured. Server push and SMS/WhatsApp remain unavailable. Pharmacy links open an independent website only when you choose them; HMS does not attach your health history.</p>
+      <p>Essential authentication cookies keep you signed in. The PWA does not cache health pages for offline access. Your browser, downloaded exports and people you share copies with are outside HMS’s ability to recall.</p>
+    </section>
+    <section className="card stack"><h2>Your choices and retention</h2>
+      <p>Under More → Devices &amp; data, withdraw processing consent to stop new imports, recomputations and notifications. Existing history remains available until deletion. Revoke a doctor or ordinary caregiver from the care-team settings to stop future access. Revocation cannot recall copies already downloaded.</p>
+      <p><Link className="underline" href="/more/data">Export all profiles you own</Link> as a ZIP containing per-metric CSVs, stored profile records and original documents. Correct editable profile details under More → Advanced. To correct an imported reading that has no editing control, the support process must be arranged with the operator; no support inbox is configured yet.</p>
+      <p><Link className="underline" href="/account/delete">Delete your account</Link> to remove owned profiles, health rows, documents and sharing links from the live service. You must separately confirm deletion of owned dependents. An interrupted deletion freezes access and can be retried. Success is shown only after Storage, health data and the sign-in identity have been removed.</p>
+      <p>Access-log references are anonymised. Other patients retain their own consultation history when a doctor deletes their account, with account references removed. Historical guardian consent keeps its authority and date after transfer; deleting the former guardian removes their identifier and IP hash, not the adult patient’s history. Free-text notes may still contain names supplied by their authors.</p>
+      <p>Live history is currently retained until deletion. Provider backups, security logs, medical-record retention and any legally required exceptions need an approved retention schedule before launch. Deletion here does not promise immediate erasure of provider backups or copies held independently by doctors.</p>
+    </section>
+    <section className="card stack"><h2>Children and grievances</h2>
+      <p>Under-18s cannot self-sign up. An adult guardian creates and owns a dependent profile and records consent on their behalf. A consent checkbox does not verify parental authority. The exact verification method, relevant child-monitoring restrictions and any applicable exceptions require a lawyer before launch.</p>
+      <p>Grievance officer / privacy contact: not yet appointed. No working grievance inbox is advertised in this preview. The operator must publish a name, business contact, identity-check process and response timetable before public launch. Applicable correction, erasure, nomination and complaint rights must be implemented with legal review.</p>
+      <p className="muted">Legal references: <a className="underline" href="https://www.meity.gov.in/static/uploads/2024/02/Digital-Personal-Data-Protection-Act-2023.pdf" target="_blank" rel="noreferrer">DPDP Act 2023</a> and <a className="underline" href="https://www.meity.gov.in/static/uploads/2025/11/53450e6e5dc0bfa85ebd78686cadad39.pdf" target="_blank" rel="noreferrer">DPDP Rules 2025</a>. The framework has phased commencement. Counsel must check the provisions effective at launch, not assume every provision is already in force.</p>
+    </section>
+  </main>;
+}
