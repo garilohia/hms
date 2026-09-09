@@ -90,6 +90,34 @@ describe("normalisation and bounded import", () => {
     const unrelated = new HealthCsvParser(() => {});
     expect(() => unrelated.write("Name,Email\n")).toThrow(UnsupportedCsvFormatError);
   });
+  it.each([
+    ["heart_rate_2026-09-01.csv", "timestamp,beats per minute,data source", "72", "heart_rate", 72, "bpm"],
+    ["daily_resting_heart_rate.csv", "timestamp,beats per minute,data source", "61", "resting_heart_rate", 61, "bpm"],
+    ["steps_2026-09-01.csv", "timestamp,steps,data source", "120", "steps", 120, "count"],
+    ["active_energy_burned_2026-09-01.csv", "timestamp,Kilocalories,data source", "12.5", "active_calories", 12.5, "kcal"],
+    ["calories_2026-09-01.csv", "timestamp,calories,data source", "13.5", "total_calories", 13.5, "kcal"],
+    ["heart_rate_variability_2026-09-01.csv", "timestamp,root mean square of successive differences milliseconds,standard deviation milliseconds,data source", "44", "hrv_rmssd", 44, "ms"],
+    ["oxygen_saturation_2026-09-01.csv", "timestamp,oxygen saturation percentage,data source", "97.4", "spo2", 97.4, "%"],
+    ["daily_respiratory_rate.csv", "timestamp,breaths per minute,data source", "15.2", "respiratory_rate", 15.2, "breaths/min"],
+    ["body_temperature_2026-09-01.csv", "timestamp,temperature celsius,data source", "33.1", "skin_temperature", 33.1, "°C"],
+    ["weight.csv", "timestamp,weight grams,data source", "71500", "weight_kg", 71.5, "kg"],
+  ])("maps Google Health Takeout %s", (file, header, raw, type, value, unit) => {
+    const metrics: NormalisedMetric[] = [];
+    const parser = new HealthCsvParser(rows => metrics.push(...rows), "Asia/Kolkata", "Google Health/Physical Activity_GoogleData/" + file);
+    parser.write(`${header}\n2026-09-01T06:00:00Z,${raw},Fitbit\n`); parser.close();
+    expect(metrics).toHaveLength(1);
+    expect(metrics[0]).toMatchObject({ metric_type: type, value, unit, recorded_at: "2026-09-01T06:00:00.000Z", device: "Google Health export" });
+  });
+  it("does not reinterpret similarly named Google Health summaries or account CSVs", () => {
+    for (const [file, header] of [
+      ["daily_heart_rate_variability.csv", "timestamp,average heart rate variability milliseconds,non rem heart rate beats per minute,data source"],
+      ["estimated_oxygen_variation-2026-09-01.csv", "timestamp,value"],
+      ["Profile.csv", "Name,Email"],
+    ]) {
+      const parser = new HealthCsvParser(() => {}, "UTC", "Google Health/" + file);
+      expect(() => parser.write(header + "\n")).toThrow(UnsupportedCsvFormatError);
+    }
+  });
   it("bounds CSV fields and rejects broken quotes and headers", () => {
     expect(() => new CsvParser(() => {}).write("x".repeat(2049))).toThrow("too long");
     const parser = new CsvParser(() => {}); parser.write('"unfinished');

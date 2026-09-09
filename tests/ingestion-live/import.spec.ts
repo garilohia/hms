@@ -138,7 +138,7 @@ test("CSV round-trip and 210 MiB Apple ZIP in a browser worker, bounded memory a
   }
 });
 
-test("Google Fit CSV folder imports supported files, skips unrelated formats and deduplicates", async ({ page, baseURL }, info) => {
+test("Google Fit and Google Health folders import supported files, skip unrelated formats and deduplicate", async ({ page, baseURL }, info) => {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL, secret = process.env.SUPABASE_SECRET_KEY, dbUrl = process.env.DATABASE_URL;
   if (!url || !secret || !dbUrl) throw new Error("Live ingestion verification requires the supplied Supabase keys and DATABASE_URL.");
   const admin = createClient(url, secret, { auth: { persistSession: false, autoRefreshToken: false } });
@@ -149,6 +149,9 @@ test("Google Fit CSV folder imports supported files, skips unrelated formats and
     await writeFile(folder + "/Daily activity metrics.csv", "Date,Calories (kcal),Average heart rate (bpm),Step count,Average weight (kg)\n2026-09-01,1800,70,8000,71\n2026-09-02,1900,72,9000,70.5\n");
     await writeFile(folder + "/2026-09-01.csv", "Date,Calories (kcal),Average heart rate (bpm),Step count,Average weight (kg)\n2026-09-01,9999,199,99999,199\n");
     await writeFile(folder + "/account.csv", "Name,Email\nSample,private@example.com\n");
+    const googleHealth = folder + "/Physical Activity_GoogleData"; await mkdir(googleHealth, { recursive: true });
+    await writeFile(googleHealth + "/heart_rate_2026-09-01.csv", "timestamp,beats per minute,data source\n2026-09-01T06:00:00Z,68,Fitbit\n");
+    await writeFile(googleHealth + "/weight.csv", "timestamp,weight grams,data source\n2026-09-01T06:00:00Z,69500,Fitbit\n");
     const link = await admin.auth.admin.generateLink({ type: "magiclink", email: "hms-import-" + randomUUID() + "@example.com", options: { data: { name: "Sample Google folder verification", dob: "1990-01-01" } } });
     if (link.error) throw new Error("Could not create import test actor: " + link.error.code);
     actor = link.data.user.id;
@@ -157,24 +160,24 @@ test("Google Fit CSV folder imports supported files, skips unrelated formats and
     await expect(page).toHaveURL(baseURL + "/more/data");
     await page.getByRole("checkbox").check();
     await page.getByLabel("Health CSV folder").setInputFiles(folder);
-    await expect(page.getByText("3 CSV files selected", { exact: false })).toBeVisible();
+    await expect(page.getByText("5 CSV files selected", { exact: false })).toBeVisible();
     const progress = page.getByTestId("import-progress");
     await page.getByRole("button", { name: "Import selected data", exact: true }).click();
     await expect(progress).toHaveAttribute("data-status", "done", { timeout: 30_000 });
-    await expect(progress).toHaveAttribute("data-inserted", "8");
-    await expect(progress).toHaveAttribute("data-file-count", "3");
+    await expect(progress).toHaveAttribute("data-inserted", "10");
+    await expect(progress).toHaveAttribute("data-file-count", "5");
     await expect(progress).toHaveAttribute("data-skipped-files", "2");
     const warnings = page.getByRole("status").filter({ hasText: "Skipped redundant daily CSV" });
     await expect(warnings).toContainText("Skipped redundant daily CSV because Daily activity metrics.csv is present: google-fit-folder/2026-09-01.csv.");
     await expect(warnings).toContainText("Skipped unsupported CSV: google-fit-folder/account.csv.");
     const rows = await db.unsafe("select metric_type,count(*)::int as n from public.metrics where user_id=$1 group by metric_type order by metric_type", [subject!]);
-    expect(rows.map(row => [row.metric_type, row.n])).toEqual([["heart_rate", 2], ["steps", 2], ["total_calories", 2], ["weight_kg", 2]]);
+    expect(rows.map(row => [row.metric_type, row.n])).toEqual([["heart_rate", 3], ["steps", 2], ["total_calories", 2], ["weight_kg", 3]]);
     const [source] = await db.unsafe("select provider,source_key from public.data_sources where user_id=$1 and source_key=$2", [subject!, "root:Google Health folder"]);
     expect(source).toMatchObject({ provider: "generic_csv", source_key: "root:Google Health folder" });
     await page.getByRole("button", { name: "Import selected data", exact: true }).click();
     await expect(progress).toHaveAttribute("data-status", "done", { timeout: 30_000 });
     await expect(progress).toHaveAttribute("data-inserted", "0");
-    await expect(progress).toHaveAttribute("data-skipped", "8");
+    await expect(progress).toHaveAttribute("data-skipped", "10");
   } finally {
     await page.close();
     if (actor) {

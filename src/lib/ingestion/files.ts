@@ -5,8 +5,8 @@ import { HealthCsvParser, normaliseCsv } from "./csv";
 import { BATCH_SIZE, type DataSource, type DataSourceAdapter, type IngestionTransport, type NormalisedMetric, type SyncResult } from "./model";
 
 export type ImportProgress = SyncResult & { records: number; unsupported: number; bytes: number; totalBytes: number; status: "working" | "done" | "cancelled" | "error";
-  fileName?: string; fileIndex?: number; fileCount?: number; skippedFiles?: number };
-type Options = { signal?: AbortSignal; onProgress?: (progress: ImportProgress) => void; timezone?: string };
+  fileName?: string; fileIndex?: number; fileCount?: number; supportedFiles?: number; skippedFiles?: number };
+type Options = { signal?: AbortSignal; onProgress?: (progress: ImportProgress) => void; timezone?: string; filePath?: string };
 export class FileAdapter implements DataSourceAdapter {
   private state: ImportProgress = { inserted: 0, skipped: 0, errors: [], records: 0, unsupported: 0, bytes: 0, totalBytes: 0, status: "working" };
   constructor(readonly provider: "apple_health_export" | "generic_csv", private file: Blob, private transport: IngestionTransport, private options: Options = {}) {}
@@ -51,7 +51,7 @@ export class FileAdapter implements DataSourceAdapter {
       const decoder = new TextDecoder("utf-8", { fatal: true });
       if (this.provider === "generic_csv") {
         this.state.totalBytes = this.file.size;
-        const csv = new HealthCsvParser(acceptMetrics, this.options.timezone);
+        const csv = new HealthCsvParser(acceptMetrics, this.options.timezone, this.options.filePath);
         const reader = this.file.stream().getReader();
         try {
           while (true) {

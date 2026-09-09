@@ -13,13 +13,29 @@ export function normaliseCsv(raw: unknown) {
 
 export class UnsupportedCsvFormatError extends Error {}
 
-type GoogleColumn = { index: number; metric_type: MetricType; unit: string };
+type GoogleColumn = { index: number; metric_type: MetricType; unit: string; scale?: number };
 const googleColumns: { names: string[]; metric_type: MetricType; unit: string }[] = [
   { names: ["step count", "steps"], metric_type: "steps", unit: "count" },
   { names: ["calories (kcal)"], metric_type: "total_calories", unit: "kcal" },
   { names: ["average heart rate (bpm)"], metric_type: "heart_rate", unit: "bpm" },
   { names: ["average weight (kg)"], metric_type: "weight_kg", unit: "kg" },
 ];
+
+type GoogleHealthSchema = { filename: RegExp; column: string; metric_type: MetricType; unit: string; scale?: number };
+const googleHealthSchemas: GoogleHealthSchema[] = [
+  { filename: /^daily_resting_heart_rate\.csv$/i, column: "beats per minute", metric_type: "resting_heart_rate", unit: "bpm" },
+  { filename: /^heart_rate_\d{4}-\d{2}(?:-\d{2})?\.csv$/i, column: "beats per minute", metric_type: "heart_rate", unit: "bpm" },
+  { filename: /^steps_\d{4}-\d{2}(?:-\d{2})?\.csv$/i, column: "steps", metric_type: "steps", unit: "count" },
+  { filename: /^active_energy_burned_\d{4}-\d{2}(?:-\d{2})?\.csv$/i, column: "kilocalories", metric_type: "active_calories", unit: "kcal" },
+  { filename: /^calories_\d{4}-\d{2}(?:-\d{2})?\.csv$/i, column: "calories", metric_type: "total_calories", unit: "kcal" },
+  { filename: /^heart_rate_variability_\d{4}-\d{2}(?:-\d{2})?\.csv$/i, column: "root mean square of successive differences milliseconds", metric_type: "hrv_rmssd", unit: "ms" },
+  { filename: /^oxygen_saturation_\d{4}-\d{2}(?:-\d{2})?\.csv$/i, column: "oxygen saturation percentage", metric_type: "spo2", unit: "%" },
+  { filename: /^daily_respiratory_rate\.csv$/i, column: "breaths per minute", metric_type: "respiratory_rate", unit: "breaths/min" },
+  { filename: /^body_temperature_\d{4}-\d{2}(?:-\d{2})?\.csv$/i, column: "temperature celsius", metric_type: "skin_temperature", unit: "°C" },
+  { filename: /^weight\.csv$/i, column: "weight grams", metric_type: "weight_kg", unit: "kg", scale: 0.001 },
+];
+
+function basename(path: string) { return path.replace(/\\/g, "/").split("/").pop() || path; }
 function absoluteTimestamp(value: string, timezone: string): string | null {
   const trimmed = value.trim();
   if (validDay(trimmed)) return new Date(dayBounds(trimmed, timezone).start).toISOString();
@@ -76,24 +92,33 @@ class CsvRowsParser {
   }
 }
 
-/** Auto-detects the HMS four-column format or Google Fit daily-metrics CSVs. */
+/** Auto-detects HMS, legacy Google Fit, and Google Health Takeout CSVs. */
 export class HealthCsvParser {
-  private mode: "hms" | "google" | undefined;
-  private google: { timestamp: number; end: number; columns: GoogleColumn[] } | undefined;
+  private mode: "hms" | "google_fit" | "google_health" | undefined;
+  private google: { timestamp: number; end: number; columns: GoogleColumn[]; device: string } | undefined;
   private parser: CsvRowsParser;
-  constructor(private accept: (metrics: NormalisedMetric[]) => void, private timezone = "UTC") {
+  constructor(private accept: (metrics: NormalisedMetric[]) => void, private timezone = "UTC", private filePath = "") {
     this.parser = new CsvRowsParser(header => this.header(header), row => this.row(row), 128);
   }
   private header(header: string[]) {
     if (header.join(",") === "timestamp,metric_type,value,unit") { this.mode = "hms"; return; }
     const names = header.map(value => value.toLowerCase());
+    const googleHealth = googleHealthSchemas.find(schema => schema.filename.test(basename(this.filePath)) && names.includes(schema.column));
+    if (googleHealth) {
+      const timestamp = names.indexOf("timestamp"), index = names.indexOf(googleHealth.column);
+      if (timestamp < 0) throw new UnsupportedCsvFormatError("Google Health CSV is missing its timestamp column.");
+      this.mode = "google_health";
+      this.google = { timestamp, end: -1, device: "Google Health export",
+        columns: [{ index, metric_type: googleHealth.metric_type, unit: googleHealth.unit, scale: googleHealth.scale }] };
+      return;
+    }
     const timestamp = names.indexOf("start time") >= 0 ? names.indexOf("start time") : names.indexOf("date");
     const columns = googleColumns.flatMap(column => {
       const index = column.names.map(name => names.indexOf(name)).find(candidate => candidate >= 0);
       return index === undefined ? [] : [{ index, metric_type: column.metric_type, unit: column.unit }];
     });
-    if (timestamp < 0 || !columns.length) throw new UnsupportedCsvFormatError("Unsupported CSV header. Choose HMS CSVs or Google Fit Daily activity metrics CSVs.");
-    this.mode = "google"; this.google = { timestamp, end: names.indexOf("end time"), columns };
+    if (timestamp < 0 || !columns.length) throw new UnsupportedCsvFormatError("Unsupported health CSV header.");
+    this.mode = "google_fit"; this.google = { timestamp, end: names.indexOf("end time"), columns, device: "Google Fit export" };
   }
   private row(row: string[]) {
     if (this.mode === "hms") {
@@ -110,8 +135,8 @@ export class HealthCsvParser {
     this.accept(config.columns.flatMap(column => {
       const text = (row[column.index] || "").trim().replace(/,/g, "");
       if (!text) return [];
-      return canonicalMetric({ metric_type: column.metric_type, value: Number(text), unit: column.unit, recorded_at, duration_s,
-        quality: "raw", external_id: null, device: "Google Fit export" });
+      return canonicalMetric({ metric_type: column.metric_type, value: Number(text) * (column.scale ?? 1), unit: column.unit, recorded_at, duration_s,
+        quality: "raw", external_id: null, device: config.device });
     }));
   }
   write(text: string) { this.parser.write(text); }

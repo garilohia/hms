@@ -10,7 +10,7 @@ export default async function DevicesPage() {
   const parsed = deviceSchema.array().safeParse(data);
   return <AppFrame><div className="stack"><h1 className="page-title">Which device?</h1>
     <p>Compare device features, not medical suitability. HMS does not sell devices or receive a commission from these links.</p>
-    <p className="muted">A listing does not mean automatic sync with HMS. Apple Health export, the HMS CSV template and Google Fit Daily activity metrics CSV folders are supported; check what your device can export. HRV methods and temperature measurements are not interchangeable.</p>
+    <p className="muted">A listing does not mean automatic sync with HMS. Apple Health export, the HMS CSV template, Google Fit Daily activity metrics and Google Health Takeout CSV folders are supported; check what your device can export. HRV methods and temperature measurements are not interchangeable.</p>
     {error || !parsed.success ? <section className="card"><p role="alert">The catalogue could not be loaded. Please reload to try again.</p></section> : parsed.data.length === 0 ? <section className="card"><p>The verified catalogue has not been published yet.</p></section> : <DeviceComparison devices={parsed.data}/>}
     <p className="muted">Features are manufacturer claims, not an HMS accuracy test. ECG, SpO₂ and other features may have age, phone and country restrictions. Check current availability, suitability, warranty and export support with the manufacturer before purchase.</p>
   </div></AppFrame>;

@@ -30,16 +30,16 @@ self.onmessage = async (event: MessageEvent<ImportRequest>) => {
       if (consolidated.has(directory(file)) && /^\d{4}-\d{2}-\d{2}\.csv$/i.test(file.name)) {
         skippedFiles++; totals.bytes += file.size;
         if (warningSamples.length < 20) warningSamples.push("Skipped redundant daily CSV because Daily activity metrics.csv is present: " + fileName + ".");
-        self.postMessage({ ...totals, totalBytes, status: "working", errors: warnings(), fileName, fileIndex: index + 1, fileCount: files.length, skippedFiles });
+        self.postMessage({ ...totals, totalBytes, status: "working", errors: warnings(), fileName, fileIndex: index + 1, fileCount: files.length, supportedFiles, skippedFiles });
         continue;
       }
       let latest: ImportProgress | undefined;
-      const adapter = new FileAdapter(input.provider, file, transport, { signal: controller.signal, timezone: input.timezone, onProgress: progress => {
+      const adapter = new FileAdapter(input.provider, file, transport, { signal: controller.signal, timezone: input.timezone, filePath: fileName, onProgress: progress => {
         latest = progress;
         failureProgress = { ...progress, inserted: totals.inserted + progress.inserted, skipped: totals.skipped + progress.skipped,
           records: totals.records + progress.records, unsupported: totals.unsupported + progress.unsupported,
           bytes: totals.bytes + progress.bytes, totalBytes, errors: warnings(),
-          fileName, fileIndex: index + 1, fileCount: files.length, skippedFiles };
+          fileName, fileIndex: index + 1, fileCount: files.length, supportedFiles, skippedFiles };
         if (progress.status === "error" || progress.status === "cancelled") return;
         self.postMessage({ ...failureProgress, status: "working" });
       } });
@@ -49,17 +49,17 @@ self.onmessage = async (event: MessageEvent<ImportRequest>) => {
         if (!(error instanceof UnsupportedCsvFormatError) || input.provider !== "generic_csv" || files.length === 1) throw error;
         skippedFiles++; totals.bytes += file.size;
         if (warningSamples.length < 20) warningSamples.push("Skipped unsupported CSV: " + fileName + ".");
-        self.postMessage({ ...totals, totalBytes, status: "working", errors: warnings(), fileName, fileIndex: index + 1, fileCount: files.length, skippedFiles });
+        self.postMessage({ ...totals, totalBytes, status: "working", errors: warnings(), fileName, fileIndex: index + 1, fileCount: files.length, supportedFiles, skippedFiles });
         continue;
       }
       if (!latest) throw new Error("The import did not report a result.");
       totals.inserted += latest.inserted; totals.skipped += latest.skipped; totals.records += latest.records;
       totals.unsupported += latest.unsupported; totals.bytes += file.size;
     }
-    if (!supportedFiles) throw new Error("No supported health CSV files were found. Google Fit folders need Daily activity metrics CSVs.");
+    if (!supportedFiles) throw new Error("No supported health readings were found. Choose an HMS CSV, a legacy Google Fit Daily activity metrics export, or the complete Google Health Takeout folder.");
     reported = true;
     self.postMessage({ ...totals, bytes: totalBytes, totalBytes, status: "done", errors: warnings(),
-      fileIndex: files.length, fileCount: files.length, skippedFiles });
+      fileIndex: files.length, fileCount: files.length, supportedFiles, skippedFiles });
   } catch (error) {
     if (!reported) {
       const progress: ImportProgress = { ...(failureProgress || { inserted: 0, skipped: 0, records: 0, unsupported: 0, bytes: 0, totalBytes: 0 }),
