@@ -17,7 +17,7 @@ test("golden 5: three CSV readings, private original document, full ZIP and hard
     await page.goto("/more/data");
     await page.getByLabel("I consent to HMS storing and processing my health readings.", { exact: false }).check();
     await page.getByLabel("Health export").setInputFiles({ name: "three.csv", mimeType: "text/csv", buffer: Buffer.from(csv) });
-    await page.getByRole("button", { name: "Import file", exact: true }).click();
+    await page.getByRole("button", { name: "Import selected data", exact: true }).click();
     await expect(page.getByTestId("import-progress")).toHaveAttribute("data-inserted", "3");
     await expect(page.getByTestId("import-progress")).toHaveAttribute("data-status", "done");
     await page.goto("/today");

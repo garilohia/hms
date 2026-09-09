@@ -1,11 +1,12 @@
 import { BlobReader, ZipReader, configure } from "@zip.js/zip.js";
 import { SaxesParser } from "saxes";
 import { normaliseApple } from "./apple-normalise";
-import { CsvParser, normaliseCsv } from "./csv";
+import { HealthCsvParser, normaliseCsv } from "./csv";
 import { BATCH_SIZE, type DataSource, type DataSourceAdapter, type IngestionTransport, type NormalisedMetric, type SyncResult } from "./model";
 
-export type ImportProgress = SyncResult & { records: number; unsupported: number; bytes: number; totalBytes: number; status: "working" | "done" | "cancelled" | "error" };
-type Options = { signal?: AbortSignal; onProgress?: (progress: ImportProgress) => void };
+export type ImportProgress = SyncResult & { records: number; unsupported: number; bytes: number; totalBytes: number; status: "working" | "done" | "cancelled" | "error";
+  fileName?: string; fileIndex?: number; fileCount?: number; skippedFiles?: number };
+type Options = { signal?: AbortSignal; onProgress?: (progress: ImportProgress) => void; timezone?: string };
 export class FileAdapter implements DataSourceAdapter {
   private state: ImportProgress = { inserted: 0, skipped: 0, errors: [], records: 0, unsupported: 0, bytes: 0, totalBytes: 0, status: "working" };
   constructor(readonly provider: "apple_health_export" | "generic_csv", private file: Blob, private transport: IngestionTransport, private options: Options = {}) {}
@@ -18,12 +19,12 @@ export class FileAdapter implements DataSourceAdapter {
     this.state = { inserted: 0, skipped: 0, errors: [], records: 0, unsupported: 0, bytes: 0, totalBytes: 0, status: "working" };
     const { signal, onProgress } = this.options;
     const batch: NormalisedMetric[] = [];
-    const accept = (raw: unknown) => {
+    const acceptMetrics = (metrics: NormalisedMetric[]) => {
       this.state.records++;
-      const metrics = this.normalise(raw);
       if (!metrics.length) this.state.unsupported++;
       batch.push(...metrics);
     };
+    const accept = (raw: unknown) => acceptMetrics(this.normalise(raw));
     const flush = async (all = false) => {
       while (batch.length >= BATCH_SIZE || (all && batch.length)) {
         signal?.throwIfAborted();
@@ -50,7 +51,7 @@ export class FileAdapter implements DataSourceAdapter {
       const decoder = new TextDecoder("utf-8", { fatal: true });
       if (this.provider === "generic_csv") {
         this.state.totalBytes = this.file.size;
-        const csv = new CsvParser(accept);
+        const csv = new HealthCsvParser(acceptMetrics, this.options.timezone);
         const reader = this.file.stream().getReader();
         try {
           while (true) {

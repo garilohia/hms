@@ -1,7 +1,7 @@
 import { BlobReader, BlobWriter, TextReader, ZipWriter } from "@zip.js/zip.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { normaliseApple, appleTimestamp } from "@/src/lib/ingestion/apple-normalise";
-import { CsvParser, CSV_TEMPLATE } from "@/src/lib/ingestion/csv";
+import { CsvParser, CSV_TEMPLATE, HealthCsvParser, UnsupportedCsvFormatError } from "@/src/lib/ingestion/csv";
 import { FileAdapter } from "@/src/lib/ingestion/files";
 import { boundedJson, httpTransport } from "@/src/lib/ingestion/http";
 import { batchInput, type DataSource, type IngestionTransport, type NormalisedMetric } from "@/src/lib/ingestion/model";
@@ -70,11 +70,33 @@ describe("normalisation and bounded import", () => {
     parser.close();
     expect(rows).toEqual([["2026-09-01T00:00:00Z", "steps", "12", "count"]]);
   });
+  it("maps Google Fit daily-metrics CSV columns in the profile timezone", () => {
+    const metrics: NormalisedMetric[] = [];
+    const parser = new HealthCsvParser(rows => metrics.push(...rows), "Asia/Kolkata");
+    const csv = 'Date,Calories (kcal),Average heart rate (bpm),Step count,Average weight (kg),Distance (m)\r\n2026-09-01,1900.5,72,"8,123",70.5,1000\r\n';
+    for (const char of csv) parser.write(char);
+    parser.close();
+    expect(metrics.map(metric => [metric.metric_type, metric.value, metric.unit])).toEqual([
+      ["steps", 8123, "count"], ["total_calories", 1900.5, "kcal"], ["heart_rate", 72, "bpm"], ["weight_kg", 70.5, "kg"],
+    ]);
+    expect(new Set(metrics.map(metric => metric.recorded_at))).toEqual(new Set(["2026-08-31T18:30:00.000Z"]));
+    expect(new Set(metrics.map(metric => metric.device))).toEqual(new Set(["Google Fit export"]));
+  });
+  it("uses absolute Google Fit intervals and rejects unrelated CSV headers", () => {
+    const metrics: NormalisedMetric[] = [];
+    const parser = new HealthCsvParser(rows => metrics.push(...rows), "Asia/Kolkata");
+    parser.write("Start time,End time,Step count\n2026-09-01T06:00:00+05:30,2026-09-01T07:00:00+05:30,1000\n"); parser.close();
+    expect(metrics[0]).toMatchObject({ recorded_at: "2026-09-01T00:30:00.000Z", duration_s: 3600, metric_type: "steps", value: 1000 });
+    const unrelated = new HealthCsvParser(() => {});
+    expect(() => unrelated.write("Name,Email\n")).toThrow(UnsupportedCsvFormatError);
+  });
   it("bounds CSV fields and rejects broken quotes and headers", () => {
     expect(() => new CsvParser(() => {}).write("x".repeat(2049))).toThrow("too long");
     const parser = new CsvParser(() => {}); parser.write('"unfinished');
     expect(() => parser.close()).toThrow("unfinished");
     expect(() => new CsvParser(() => {}).write("bad,header\n")).toThrow("header");
+    const auto = new HealthCsvParser(() => {}); auto.write("timestamp,metric_type,value,unit\n");
+    expect(() => auto.write("2026-09-01T00:00:00Z,steps,1,count,extra\n")).toThrow("exactly four columns");
     // HMS exports retain provenance columns. Never silently strip them and
     // reclassify exported simulator rows as real generic-CSV readings.
     expect(() => new CsvParser(() => {}).write("timestamp,metric_type,value,unit,provider,is_sample\n")).toThrow("exactly four columns");

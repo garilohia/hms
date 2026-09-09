@@ -50,7 +50,7 @@ test("CSV round-trip and 210 MiB Apple ZIP in a browser worker, bounded memory a
     await page.goto("/more/data");
     await page.getByRole("checkbox").check();
     await page.getByLabel("Health export").setInputFiles({ name: "sample.csv", mimeType: "text/csv", buffer: Buffer.from(CSV_TEMPLATE) });
-    await page.getByRole("button", { name: "Import file", exact: true }).click();
+    await page.getByRole("button", { name: "Import selected data", exact: true }).click();
     const progress = page.getByTestId("import-progress");
     await expect(progress).toHaveAttribute("data-status", "done", { timeout: 30_000 });
     await expect(progress).toHaveAttribute("data-inserted", "3");
@@ -81,7 +81,7 @@ test("CSV round-trip and 210 MiB Apple ZIP in a browser worker, bounded memory a
     for (let pass = 0; pass < 2; pass++) {
       await page.getByLabel("Health export").setInputFiles(fixturePath);
       const started = Date.now(); let lastAdvance = started, lastCount = -1, nextReport = started;
-      await page.getByRole("button", { name: "Import file", exact: true }).click();
+      await page.getByRole("button", { name: "Import selected data", exact: true }).click();
       await expect(progress).toHaveAttribute("data-status", "working");
       // M2 specifies correctness and bounded memory, not a WAN throughput target.
       // Allow fifteen minutes per pass, but fail a stalled importer within two minutes.
@@ -128,6 +128,54 @@ test("CSV round-trip and 210 MiB Apple ZIP in a browser worker, bounded memory a
       process.stderr.write("Could not save import diagnostics: " + String(error) + "\n");
     });
     await cdp.detach();
+    await page.close();
+    if (actor) {
+      const { error } = await admin.auth.admin.deleteUser(actor);
+      if (error) throw new Error("Import fixture cleanup failed: " + error.code);
+      await db.unsafe("delete from public.audit_log where actor_id=$1 or target_user_id=$2", [actor, subject || null]);
+    }
+    await db.end();
+  }
+});
+
+test("Google Fit CSV folder imports supported files, skips unrelated formats and deduplicates", async ({ page, baseURL }, info) => {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL, secret = process.env.SUPABASE_SECRET_KEY, dbUrl = process.env.DATABASE_URL;
+  if (!url || !secret || !dbUrl) throw new Error("Live ingestion verification requires the supplied Supabase keys and DATABASE_URL.");
+  const admin = createClient(url, secret, { auth: { persistSession: false, autoRefreshToken: false } });
+  const db = postgres(dbUrl, { max: 1, prepare: false });
+  let actor: string | undefined, subject: string | undefined;
+  try {
+    const folder = info.outputPath("google-fit-folder"); await mkdir(folder, { recursive: true });
+    await writeFile(folder + "/Daily activity metrics.csv", "Date,Calories (kcal),Average heart rate (bpm),Step count,Average weight (kg)\n2026-09-01,1800,70,8000,71\n2026-09-02,1900,72,9000,70.5\n");
+    await writeFile(folder + "/2026-09-01.csv", "Date,Calories (kcal),Average heart rate (bpm),Step count,Average weight (kg)\n2026-09-01,9999,199,99999,199\n");
+    await writeFile(folder + "/account.csv", "Name,Email\nSample,private@example.com\n");
+    const link = await admin.auth.admin.generateLink({ type: "magiclink", email: "hms-import-" + randomUUID() + "@example.com", options: { data: { name: "Sample Google folder verification", dob: "1990-01-01" } } });
+    if (link.error) throw new Error("Could not create import test actor: " + link.error.code);
+    actor = link.data.user.id;
+    const [profile] = await db.unsafe("select id from public.profiles where auth_user_id=$1", [actor]); subject = profile.id;
+    await page.goto("/auth/confirm?next=/more/data&token_hash=" + encodeURIComponent(link.data.properties.hashed_token));
+    await expect(page).toHaveURL(baseURL + "/more/data");
+    await page.getByRole("checkbox").check();
+    await page.getByLabel("Health CSV folder").setInputFiles(folder);
+    await expect(page.getByText("3 CSV files selected", { exact: false })).toBeVisible();
+    const progress = page.getByTestId("import-progress");
+    await page.getByRole("button", { name: "Import selected data", exact: true }).click();
+    await expect(progress).toHaveAttribute("data-status", "done", { timeout: 30_000 });
+    await expect(progress).toHaveAttribute("data-inserted", "8");
+    await expect(progress).toHaveAttribute("data-file-count", "3");
+    await expect(progress).toHaveAttribute("data-skipped-files", "2");
+    const warnings = page.getByRole("status").filter({ hasText: "Skipped redundant daily CSV" });
+    await expect(warnings).toContainText("Skipped redundant daily CSV because Daily activity metrics.csv is present: google-fit-folder/2026-09-01.csv.");
+    await expect(warnings).toContainText("Skipped unsupported CSV: google-fit-folder/account.csv.");
+    const rows = await db.unsafe("select metric_type,count(*)::int as n from public.metrics where user_id=$1 group by metric_type order by metric_type", [subject!]);
+    expect(rows.map(row => [row.metric_type, row.n])).toEqual([["heart_rate", 2], ["steps", 2], ["total_calories", 2], ["weight_kg", 2]]);
+    const [source] = await db.unsafe("select provider,source_key from public.data_sources where user_id=$1 and source_key=$2", [subject!, "root:Google Health folder"]);
+    expect(source).toMatchObject({ provider: "generic_csv", source_key: "root:Google Health folder" });
+    await page.getByRole("button", { name: "Import selected data", exact: true }).click();
+    await expect(progress).toHaveAttribute("data-status", "done", { timeout: 30_000 });
+    await expect(progress).toHaveAttribute("data-inserted", "0");
+    await expect(progress).toHaveAttribute("data-skipped", "8");
+  } finally {
     await page.close();
     if (actor) {
       const { error } = await admin.auth.admin.deleteUser(actor);
