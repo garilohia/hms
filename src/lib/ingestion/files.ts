@@ -7,6 +7,7 @@ import { BATCH_SIZE, type DataSource, type DataSourceAdapter, type IngestionTran
 export type ImportProgress = SyncResult & { records: number; unsupported: number; bytes: number; totalBytes: number; status: "working" | "done" | "cancelled" | "error";
   fileName?: string; fileIndex?: number; fileCount?: number; supportedFiles?: number; skippedFiles?: number };
 type Options = { signal?: AbortSignal; onProgress?: (progress: ImportProgress) => void; timezone?: string; filePath?: string };
+const MAX_PENDING_BATCHES = 3;
 export class FileAdapter implements DataSourceAdapter {
   private state: ImportProgress = { inserted: 0, skipped: 0, errors: [], records: 0, unsupported: 0, bytes: 0, totalBytes: 0, status: "working" };
   constructor(readonly provider: "apple_health_export" | "generic_csv", private file: Blob, private transport: IngestionTransport, private options: Options = {}) {}
@@ -25,18 +26,37 @@ export class FileAdapter implements DataSourceAdapter {
       batch.push(...metrics);
     };
     const accept = (raw: unknown) => acceptMetrics(this.normalise(raw));
+    const pending = new Set<Promise<void>>();
+    let persistenceError: unknown;
+    const persist = (metrics: NormalisedMetric[]) => {
+      const task = this.transport.persist(source, metrics).then(counts => {
+        this.state.inserted += counts.inserted; this.state.skipped += counts.skipped;
+        onProgress?.({ ...this.state });
+      }).catch(error => { persistenceError ??= error; }).finally(() => { pending.delete(task); });
+      pending.add(task);
+    };
+    const waitForCapacity = async () => {
+      if (pending.size >= MAX_PENDING_BATCHES) await Promise.race(pending);
+      if (persistenceError) {
+        await Promise.all(pending);
+        throw persistenceError;
+      }
+    };
     const flush = async (all = false) => {
       while (batch.length >= BATCH_SIZE || (all && batch.length)) {
         signal?.throwIfAborted();
-        const pending = batch.splice(0, BATCH_SIZE);
-        const counts = await this.transport.persist(source, pending);
-        this.state.inserted += counts.inserted; this.state.skipped += counts.skipped;
-        onProgress?.({ ...this.state });
+        persist(batch.splice(0, BATCH_SIZE));
+        await waitForCapacity();
+      }
+      if (all) {
+        await Promise.all(pending);
+        if (persistenceError) throw persistenceError;
       }
     };
     let lastReport = 0;
     // Both parsers consume small decoded slices, even if a decompressor emits a
-    // large chunk. Each flush is awaited before further parsing (backpressure).
+    // large chunk. At most three persistence calls may be pending, retaining
+    // backpressure while overlapping request authentication and network time.
     const consume = async (chunk: Uint8Array, write: (text: string) => void, decoder: TextDecoder) => {
       for (let offset = 0; offset < chunk.length; offset += 16384) {
         signal?.throwIfAborted();

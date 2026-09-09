@@ -11,7 +11,7 @@ import { metricTypes } from "@/src/lib/ingestion/model";
 
 const userId = "bcd5d3f3-924a-432c-95b0-24f30f19c2b8";
 const source: DataSource = { id: userId, userId, provider: "generic_csv", key: "test" };
-function memoryTransport() {
+function memoryTransport(delayMs = 0) {
   const rows = new Map<string, NormalisedMetric>();
   let inFlight = 0, maxInFlight = 0;
   const transport: IngestionTransport = {
@@ -20,7 +20,8 @@ function memoryTransport() {
       maxInFlight = Math.max(maxInFlight, ++inFlight);
       expect(batch.length).toBeLessThanOrEqual(1000);
       let inserted = 0;
-      await Promise.resolve();
+      if (delayMs) await new Promise(resolve => setTimeout(resolve, delayMs));
+      else await Promise.resolve();
       for (const row of batch) {
         const key = row.metric_type + row.recorded_at + row.device;
         if (!rows.has(key)) { rows.set(key, row); inserted++; }
@@ -138,14 +139,15 @@ describe("normalisation and bounded import", () => {
     expect(sink.rows.size).toBe(3);
   });
   it("streams a real compressed XML ZIP with backpressure and skip counts", async () => {
-    const sink = memoryTransport();
+    const sink = memoryTransport(5);
     const record = '<Record type="HKQuantityTypeIdentifierHeartRate" unit="count/min" value="70" startDate="2026-09-01 00:00:00 +0000"/>';
     const file = await xmlZip('<?xml version="1.0"?><!DOCTYPE HealthData [<!ELEMENT HealthData ANY>]><HealthData>' + record.repeat(3100) + '<Record type="Unknown"/>' + '</HealthData>');
     let unsupported = 0;
     const adapter = new FileAdapter("apple_health_export", file, sink.transport, { onProgress: p => { unsupported = p.unsupported; } });
     expect(await adapter.sync(source)).toMatchObject({ inserted: 1, skipped: 3099 });
     expect(unsupported).toBe(1);
-    expect(sink.maxInFlight()).toBe(1);
+    expect(sink.maxInFlight()).toBeGreaterThan(1);
+    expect(sink.maxInFlight()).toBeLessThanOrEqual(3);
     // Prove the fixture is compressed and read through ZIP code, not a plain XML shortcut.
     expect(file.size).toBeLessThan(3100 * record.length);
     expect(new BlobReader(file)).toBeDefined();

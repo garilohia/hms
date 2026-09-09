@@ -14,7 +14,7 @@ M0 tooling: use Node.js 24 for CI and the documented runtime, npm 11.19.0, and N
 
 Run application compute entirely within Vercel, Supabase, and the user's browser. Do not provision a separate worker service.
 
-The user selects `export.zip` locally. A browser Web Worker streams ZIP decompression and SAX-style parsing of `export.xml`, maps records through the adapter's `normalise()`, and POSTs bounded normalised batches to the ingestion API. Do not load the whole archive or XML into memory, or upload the archive to a server function. Use backpressure so parsing cannot accumulate an unbounded queue of pending batches.
+The user selects `export.zip` locally. A browser Web Worker streams ZIP decompression and SAX-style parsing of `export.xml`, maps records through the adapter's `normalise()`, and POSTs bounded normalised batches to the ingestion API. Do not load the whole archive or XML into memory, or upload the archive to a server function. Use backpressure so parsing cannot accumulate an unbounded queue of pending batches. Permit at most three 1,000-reading persistence calls in flight so authentication/network latency overlaps without changing the 1 MiB request boundary or allowing unbounded memory growth.
 
 The API independently validates every batch and checks the authenticated actor's ownership/guardianship and ingestion consent for the target profile. Persist deduplicated metrics and pending summary work in Supabase. Show progress, cancellation, and recoverable failures in the UI. Processing depends on the browser remaining open; safe re-import uses the existing deduplication key.
 
