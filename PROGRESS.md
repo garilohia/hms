@@ -1,5 +1,13 @@
 # Build progress
 
+## Post-M8 — Native readiness, measured latency and safety semantics
+
+- Added a versioned bearer-authenticated mobile bootstrap, native source registration and immutable batch API for future HealthKit and Health Connect clients. Native batches reuse consent, ownership, canonical-unit, future-time, deduplication, summary and alert boundaries.
+- Added private batch receipts with exact-retry results and changed-content refusal, plus an audited 30-day latency report and `/more/advanced/latency` UI for source freshness, per-metric source delay, alert creation and completed delivery timing.
+- Documented encrypted offline queue, token refresh, background scheduling, health-value-free push and physical-device acceptance requirements for iOS and Android. No native binary is claimed because this host lacks full Xcode and Android toolchains.
+- Recorded clinical review, supervised pilot and Vercel Preview environment parity as external launch gates. Missing data is explicitly treated as a feed state, never a medical inference.
+- Added physical-device native acceptance, supervised-pilot, clinical/legal sign-off and provider-connector definition-of-done checklists. External approvals and signed mobile binaries remain pending rather than being marked complete in code.
+
 ## M0 — Repo, tooling, CI
 
 - Built: adopted Next.js 16.3.4/App Router, strict TypeScript, Tailwind and existing Supabase helpers; npm lockfile; public configuration validation; Vitest and Playwright tooling; push/PR GitHub quality workflow; complete tracked environment template; five-line README guide.

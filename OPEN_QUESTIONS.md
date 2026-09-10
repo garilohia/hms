@@ -22,7 +22,7 @@
 
 - The environment has no cron secret, Resend key or VAPID credentials, and no deployed application URL yet. Configure the same random `CRON_SECRET` in Vercel and restricted Supabase Vault, set the deployed `NEXT_PUBLIC_APP_URL`, then run `npm run cron:setup` and observe successful minute-by-minute HTTP responses. Do not assume a successful pg_cron SQL run means the HTTP handler succeeded.
 - Email uses a privacy-preserving console stub until a verified Resend sender/key are configured. Test real delivery only to an authorised recipient. Sample data always remains stubbed. Monitor failed/exhausted delivery rows before launch.
-- Browser worker registration and local notification tests are separate from server Web Push delivery, which remains a stub. Enabling real push also needs persistent subscriptions, recipient scoping and a configured transport; merely filling VAPID env fields does not enable it. SMS/WhatsApp are stubs and no provider accounts were created.
+- Browser worker registration and local notification tests are separate from server Web Push delivery. Web Push subscription storage, recipient rechecks and transport are implemented, but production delivery still requires the configured VAPID pair and a physical-device test. SMS/WhatsApp remain stubs and no provider accounts were created.
 
 ## OQ005 — History timezone changes after import
 
@@ -46,3 +46,18 @@
 - Register production OAuth clients for Google Health and WHOOP, approve their consent screens, and add the exact local and production callback URLs before enabling their Connect buttons. No provider accounts, terms or credentials were created by this build.
 - Garmin live linking requires acceptance into the Garmin Connect Developer Program and a commercial licence decision. Ultrahuman multi-user access requires partner approval. Owners, fees, allowed data, deletion/revocation duties and launch availability remain unresolved.
 - A live Apple Watch background connection requires a native iOS HealthKit bridge and App Store privacy review. The launch web architecture intentionally supports Apple Health export instead.
+
+## OQ009 — Native build, signing and physical-device acceptance
+
+- The shared bearer-authenticated server contract, source registration, immutable batch receipts, latency report and platform implementation checklists are in the repository.
+- This Mac currently has Apple Command Line Tools but not full Xcode, and has no Java/Gradle Android toolchain. Install the supported toolchains, choose bundle/application IDs and signing accounts, then implement and verify the platform clients against `mobile/README.md`.
+- Do not mark native background collection complete until HealthKit/Health Connect permissions, process death, reboot, offline recovery, battery saving, clock changes, consent withdrawal, token expiry, push acknowledgement and physical wearable behavior pass on supported devices.
+
+## OQ010 — Clinical alert review and supervised pilot
+
+- Storage bounds and illustrative UI starting points are engineering safeguards, not prescribed clinical thresholds. A qualified clinical safety reviewer must approve the launch rule set, copy, escalation policy, contraindications and test protocol.
+- A supervised pilot needs named consenting participants, supported devices, an incident/withdrawal procedure and explicit success criteria for source latency, false positives, missed readings and delivery reliability. No participant or real personal dataset is created or enrolled by this code change.
+
+## OQ011 — Vercel preview environment parity
+
+- The Vercel project is accessible, but its public Supabase URL/publishable key are currently listed for Production and Development rather than Preview. Add deliberate Preview values and a Preview `NEXT_PUBLIC_APP_URL` strategy before treating a preview deployment as a functioning staging environment. Do not silently reuse production health data for a staging pilot.

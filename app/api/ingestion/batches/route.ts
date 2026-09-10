@@ -1,11 +1,11 @@
-import { authenticatedClient, sameOrigin } from "@/src/lib/auth/server";
+import { authenticatedClient, authenticatedMutationOrigin } from "@/src/lib/auth/server";
 import { boundedJson } from "@/src/lib/ingestion/http";
 import { batchInput } from "@/src/lib/ingestion/model";
 import { processFreshHealthData } from "@/src/lib/jobs/immediate";
 
 export async function POST(request: Request) {
-  if (!sameOrigin(request)) return Response.json({ error: "Request origin rejected." }, { status: 403 });
-  const session = await authenticatedClient();
+  if (!authenticatedMutationOrigin(request)) return Response.json({ error: "Request origin rejected." }, { status: 403 });
+  const session = await authenticatedClient(request);
   if (!session) return Response.json({ error: "Sign in first." }, { status: 401 });
   let body: unknown;
   try { body = await boundedJson(request); }

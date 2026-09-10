@@ -1,10 +1,10 @@
-import { authenticatedClient, sameOrigin } from "@/src/lib/auth/server";
+import { authenticatedClient, authenticatedMutationOrigin } from "@/src/lib/auth/server";
 import { boundedJson } from "@/src/lib/ingestion/http";
 import { sourceInput } from "@/src/lib/ingestion/model";
 
 export async function POST(request: Request) {
-  if (!sameOrigin(request)) return Response.json({ error: "Request origin rejected." }, { status: 403 });
-  const session = await authenticatedClient();
+  if (!authenticatedMutationOrigin(request)) return Response.json({ error: "Request origin rejected." }, { status: 403 });
+  const session = await authenticatedClient(request);
   if (!session) return Response.json({ error: "Sign in first." }, { status: 401 });
   const parsed = sourceInput.safeParse(await boundedJson(request, 4096).catch(() => null));
   if (!parsed.success) return Response.json({ error: "Check the data source details." }, { status: 400 });

@@ -1,10 +1,10 @@
-# HMS build handoff — 8 September 2026
+# HMS build handoff — 10 September 2026
 
-## Status: M0–M8 complete
+## Status: M0–M8 complete; native server foundation added
 
-All nine milestones are implemented and verified in order. The M8 completion commit is the verified `main` head. The original `/Users/gari/Documents/ChatGPT/HMS` checkout remains on its separate M4 branch and was not switched or overwritten.
+All nine original milestones are implemented. Subsequent work on `big-changes` adds versioned native ingestion, bearer-token authentication, immutable retry receipts and a measured latency/freshness dashboard. It does not claim signed native binaries, vendor approval, a supervised pilot or clinical/legal approval.
 
-The large streaming-import verification passed twice, and the complete shorter verification matrix passed twice on the final code. There is no public deployment URL: M7 used PLAN's production-build fallback after its Vercel CLI check reported logged out.
+The original large streaming-import and shorter verification matrix evidence remains below. The linked Vercel project and production site now exist, but Preview does not yet have deliberate public Supabase configuration. Production was not redeployed during this pass; staging must not silently use production health data.
 
 ## What works
 
@@ -50,11 +50,22 @@ These are actual passing commands on the M8 worktree. The large-import command p
 | `git diff --check` | Passes. |
 | `npm run ingestion:verify -- --repeat-each=2` | Two complete tests passed in 36.7 minutes. Each generated 220,201,254 XML bytes and 620,285 records, inserted 6,000 distinct rows then zero on re-import, used 1,243 bounded batches/three workers and stayed below 512 MiB RSS. |
 
+### Post-M8 native/freshness verification — 10 September 2026
+
+- `npm run check`: lint, strict typecheck and 132 unit tests pass.
+- `npm run build`: production build passes with 54 routes.
+- `npm run db:verify`: all 91 migration, RLS, native replay and latency-report tests pass.
+- `npm run db:advisors`: no issues reported.
+- `npm run e2e`: all nine public/boundary/legal browser tests pass.
+- `npm run auth:verify`: both live Supabase auth tests pass, including bearer bootstrap, source registration and immutable batch retry.
+- `npm run alerts:verify`: the protected minute job, alert acknowledgement/settings and local notification path pass.
+- The local signed-in latency dashboard was visually checked at 390 px. Native physical-device and production notification/provider tests remain launch gates.
+
 The two final import reports are retained in `docs/verification/m8-ingestion.json`. Their first/second test durations were 559,484/555,669 ms and 528,488/532,773 ms; peak renderer RSS was 194,609,152 and 236,044,288 bytes. Earlier host-sleep interruptions and deadline failures are accurately retained in PROGRESS.md and are not counted. Their exact synthetic fixtures were removed and checked absent; seeded samples remain intentionally.
 
 ## Cuts and known limitations
 
-- Fitbit OAuth and Fitbit/Garmin export adapters are unattempted stretch work, not shipped integrations. Aggregator, server Web Push, SMS and WhatsApp remain explicit stubs. Native HealthKit/Health Connect are out of scope. Catalogue features do not imply HMS import compatibility; Apple HRV SDNN is not relabelled RMSSD.
+- Vendor-specific Fitbit/Garmin/WHOOP/Oura/Withings connectors are not shipped. The versioned HealthKit/Health Connect server contract and acceptance documents exist, but compiled companions, encrypted device queues, APNs/FCM credentials and physical-device verification remain pending. Catalogue features do not imply HMS import compatibility; Apple HRV SDNN is not relabelled RMSSD.
 - No actual deployed scheduler, real notification inbox delivery, public Vercel URL or hosted GitHub Actions result is claimed. No third-party account, paid plan, partnership or order was created. SMTP/redirect, cron and notification setup remain OQ002–OQ004.
 - Doctors in the seed are fictional Sample data. Real credential checks and clinician onboarding must precede clinical use. Chat uses explicit refresh. Video is a supplied Meet/Zoom link; there is no video service, payment flow or guaranteed immediate response. Caregiver invitations use account codes, not delivered invitation emails.
 - PDFs embed Latin/Devanagari fonts. Unsupported scripts/emoji produce an explicit error; complete HTML remains available. PDFs show six complete medications and six recent document titles, with prominent remaining counts. Downloaded copies cannot be recalled after revocation. See OQ006.

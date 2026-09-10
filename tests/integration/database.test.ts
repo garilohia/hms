@@ -490,6 +490,32 @@ describe("real Postgres: migrations, authentication guard, RLS and audited acces
     // Adapters only queue work; the existing summary is unchanged until M3.
     expect((await q("select * from " + t("daily_summaries") + " where user_id=$1", [subjects.alice]))).toHaveLength(1);
   });
+  it("registers native sources, makes batch retries idempotent and reports measured latency", async () => {
+    await actAs(actors.alice);
+    await q("select " + fn("record_consent") + "($1,'data_ingestion',true,'test',$2)", [subjects.alice, hash]);
+    const installation = "ios:" + randomUUID();
+    const [connected] = await q("select " + fn("connect_native_source") + "($1,'ios_healthkit',$2,'Sample iPhone',array['heart_rate','spo2'],$3) as id", [subjects.alice, installation, 60]);
+    const batchId = randomUUID();
+    // The suite runs in one transaction, so the ingestion guard's `now()` is
+    // the transaction start even when this test executes several minutes later.
+    const [databaseClock] = await q("select extract(epoch from now()) * 1000 as milliseconds");
+    const metric = [{ metric_type: "heart_rate", value: 72, unit: "bpm", recorded_at: new Date(Number(databaseClock.milliseconds) - 120_000).toISOString(), duration_s: 60, quality: "raw", external_id: "healthkit:sample-1" }];
+    const [first] = await q("select " + fn("ingest_native_batch") + "($1,$2,$3,$4::text::jsonb) as result", [subjects.alice, connected.id, batchId, JSON.stringify(metric)]);
+    expect(first.result).toMatchObject({ inserted: 1, skipped: 0, batch_id: batchId, replayed: false });
+    const [retry] = await q("select " + fn("ingest_native_batch") + "($1,$2,$3,$4::text::jsonb) as result", [subjects.alice, connected.id, batchId, JSON.stringify(metric)]);
+    expect(retry.result).toMatchObject({ inserted: 1, skipped: 0, batch_id: batchId, replayed: true });
+    await q("SAVEPOINT changed_native_batch");
+    await expect(q("select " + fn("ingest_native_batch") + "($1,$2,$3,$4::text::jsonb)", [subjects.alice, connected.id, batchId, JSON.stringify([{ ...metric[0], value: 73 }])])).rejects.toMatchObject({ code: "22023" });
+    await q("ROLLBACK TO SAVEPOINT changed_native_batch");
+    const [report] = await q("select " + fn("latency_report") + "($1) as value", [subjects.alice]);
+    expect(report.value.sources.find((item: { id: string }) => item.id === connected.id)).toMatchObject({ platform: "ios_healthkit", freshness: "current", cadence: 60 });
+    expect(report.value.metrics.find((item: { source_id: string }) => item.source_id === connected.id)).toMatchObject({ metric_type: "heart_rate", count: 1 });
+    await q("SAVEPOINT hidden_native_receipts");
+    await expect(q('select * from "' + privateSchema + '"."native_ingestion_batches"')).rejects.toMatchObject({ code: "42501" });
+    await q("ROLLBACK TO SAVEPOINT hidden_native_receipts");
+    await actAs(actors.bob);
+    await expect(q("select " + fn("latency_report") + "($1)", [subjects.alice])).rejects.toMatchObject({ code: "42501" });
+  });
   it("requires ingestion consent even for the profile owner", async () => {
     await actAs(actors.alice);
     await expect(q("select " + fn("connect_source") + "($1,'generic_csv','CSV')",[subjects.alice])).rejects.toMatchObject({ code: "42501" });

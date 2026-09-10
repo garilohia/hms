@@ -225,6 +225,27 @@
       "when": 1789043992985,
       "tag": "0031_vengeful_scream",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1789048275625,
+      "tag": "0032_native_ingestion_and_latency",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1789048961736,
+      "tag": "0033_native_rpc_execution_grants",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1789049169001,
+      "tag": "0034_native_source_key_fix",
+      "breakpoints": true
     }
   ]
 }
