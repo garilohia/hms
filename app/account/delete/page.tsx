@@ -8,7 +8,7 @@ export default async function DeleteAccountPage() {
   const { data, error } = await session.client.rpc("hms_account_deletion_status");
   if (error) throw new Error("Could not check account deletion status.");
   const status = z.object({ pending: z.boolean(), stage: z.string().nullable(), profile_count: z.number() }).parse(data);
-  return <main className="mx-auto w-full max-w-lg p-6 py-12 stack"><h1 className="page-title">Delete your account</h1>
+  return <main className="onboarding stack"><h1 className="page-title">Delete your account</h1>
     <p>This permanently removes your health profiles, readings, uploaded documents, summaries and sharing links from the live service, then deletes your sign-in account.</p>
     <p>Dependent profiles you still own will also be deleted. This cannot be undone. Export anything you need first.</p>
     <p className="muted">If you are a doctor, other patients keep their consultation history without your account identifier. Provider backups follow their separate retention periods; this is not an immediate backup purge.</p>

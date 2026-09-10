@@ -7,7 +7,7 @@ export const profileSchema = z.object({ id:z.uuid(),name:z.string(),dob:z.string
   sex_at_birth:z.string().nullable(),country_of_residence:z.string(),onboarding_completed_at:z.string().nullable(),cycle_tracking_enabled:z.boolean() });
 export type PatientProfile = z.infer<typeof profileSchema>;
 export const summarySchema = z.object({ day:z.string(),rhr:num,hrv_avg:num,spo2_avg:num,spo2_min:num,sleep_duration_min:num,skin_temp_deviation:num,weight_kg:num,steps:num,
-  bp_systolic:num,bp_diastolic:num,readiness_score:num,contains_sample:z.boolean(),source_ids:z.record(z.string(),z.string()),recovery_evidence:z.record(z.string(),z.unknown()) });
+  bp_systolic:num,bp_diastolic:num,readiness_score:num,computed_at:z.string().optional(),contains_sample:z.boolean(),source_ids:z.record(z.string(),z.string()),recovery_evidence:z.record(z.string(),z.unknown()) });
 export type Summary = z.infer<typeof summarySchema>;
 export const alertSchema = z.object({ id:z.uuid(),severity:z.enum(["info","attention","urgent"]),metric_snapshot:z.object({body:z.string()}).passthrough(),fired_at:z.string(),
   event_start:z.string().nullable(),acknowledged_at:z.string().nullable(),escalation_due_at:z.string().nullable(),is_sample:z.boolean(),is_historical:z.boolean() });

@@ -226,3 +226,9 @@ The History chart's "usual range" band is the rolling 28-day median ± 3 MAD of 
 The polyline is split at the exact crossing of the band edge (linear interpolation of both the value and the moving edge), never recoloured whole. Alert markers are 2px `--urgent` notches on the axis for every severity, as §5.5 requires; the acknowledged state is carried in the marker's accessible name and title rather than by a second colour. Chart geometry lives in `src/lib/patient/chart.ts` as pure functions; the shared `DataChart` component measures its container and rebuilds the geometry at the rendered width so axis text stays at the axis size on every viewport.
 
 No existing test assertion changed for this pass; new unit tests cover the band threshold, the boundary split, the text alternative and bar rendering.
+
+## D029 — Freshness line source and the screen sweep
+
+The Today freshness line (DESIGN.md §7.5) reads `computed_at` from the newest daily summary, which the patient view already returns and the client schema previously discarded. No column, RPC or scope changed; a summary is recomputed whenever readings land, so its timestamp is the honest "synced" moment available to every reader of Today, including summary-only caregivers. Readings older than six hours switch the dot to `--ink-soft` and the copy to "Last synced" with the time in the profile's timezone; with no summary at all the line says "Not synced yet" rather than disappearing.
+
+Every route now uses the shared primitives rather than ad-hoc utility borders and fills. Link rows no longer append an arrow glyph (§12). The three DESIGN.md densities are not implemented because no mode exists in the product (OQ014).

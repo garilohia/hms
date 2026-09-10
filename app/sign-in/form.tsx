@@ -25,20 +25,20 @@ export function SignInForm({showTestLogin=false}:{showTestLogin?:boolean}) {
       window.location.assign(result.next);
     } catch(error) { setMessage(error instanceof Error?error.message:"Test login failed.");setBusy(false); }
   }
-  return <form onSubmit={submit} className="space-y-5">
+  return <form onSubmit={submit} className="stack">
     <label className="block">Account
-      <select aria-label="Account" value={mode} onChange={e => setMode(e.target.value as "signin" | "signup")} className="mt-2 w-full rounded-lg border p-3">
+      <select aria-label="Account" value={mode} onChange={e => setMode(e.target.value as "signin" | "signup")} className="mt-2 w-full">
         <option value="signin">Sign in</option><option value="signup">Create an adult account</option>
       </select>
     </label>
-    <label className="block">Email<input name="email" type="email" autoComplete="email" required className="mt-2 w-full rounded-lg border p-3" /></label>
+    <label className="block">Email<input name="email" type="email" autoComplete="email" required className="mt-2 w-full" /></label>
     {mode === "signup" && <>
-      <label className="block">Name<input name="name" autoComplete="name" maxLength={120} required className="mt-2 w-full rounded-lg border p-3" /></label>
-      <label className="block">Date of birth<input name="dob" type="date" required className="mt-2 w-full rounded-lg border p-3" /></label>
+      <label className="block">Name<input name="name" autoComplete="name" maxLength={120} required className="mt-2 w-full" /></label>
+      <label className="block">Date of birth<input name="dob" type="date" required className="mt-2 w-full" /></label>
       <p className="muted">Under 18? Your guardian creates a dependent profile from their account.</p>
     </>}
     <button disabled={busy} className="button w-full">{busy ? "Sending…" : "Email me a sign-in link"}</button>
-    {showTestLogin&&<div className="space-y-3 border-t border-rule pt-5"><button type="button" disabled={busy} onClick={()=>void testLogin()} className="button secondary w-full">{busy?"Opening test account…":"Continue as test user"}</button><p className="muted">Local development only. Creates a real Supabase session without sending email.</p></div>}
+    {showTestLogin&&<div className="stack border-t border-rule pt-5"><button type="button" disabled={busy} onClick={()=>void testLogin()} className="button secondary w-full">{busy?"Opening test account…":"Continue as test user"}</button><p className="muted">Local development only. Creates a real Supabase session without sending email.</p></div>}
     <p role="status" aria-live="polite">{message}</p>
   </form>;
 }

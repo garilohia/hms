@@ -29,7 +29,7 @@ export function DeviceComparison({ devices }: { devices: Device[] }) {
       const price = priceOf(d, filters.currency), features = (Object.entries(featureLabels) as [Feature, string][]).filter(([key]) => d[key]).map(([, label]) => label);
       return <article className="card stack" key={d.brand + "/" + d.model} aria-label={d.brand + " " + d.model}>
         <div><p className="eyebrow">{d.category.replaceAll("_", " ")}</p><h2 className="font-semibold">{d.brand} {d.model}</h2></div>
-        <div><p className="text-xl font-semibold">{price === null ? "Check price" : "From " + money(price, filters.currency)}</p><p className="muted">{price === null ? "Price not verified in " + filters.currency + ". Sources checked " : "Price verified "}<time dateTime={d.last_verified_at.slice(0, 10)}>{verifiedDate(d.last_verified_at)}</time>.</p></div>
+        <div><p className="type-title">{price === null ? "Check price" : "From " + money(price, filters.currency)}</p><p className="muted">{price === null ? "Price not verified in " + filters.currency + ". Sources checked " : "Price verified "}<time dateTime={d.last_verified_at.slice(0, 10)}>{verifiedDate(d.last_verified_at)}</time>.</p></div>
         <p>{d.editorial_note}</p>
         <p><strong>Updates:</strong> {d.connection_path}. {d.latency_label}</p>
         <p className="muted">{d.realtime_capable ? "A live stream is technically possible with the vendor's approved native/partner access." : "This route does not provide a continuous live stream to HMS."}</p>

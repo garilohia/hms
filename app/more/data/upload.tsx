@@ -61,41 +61,41 @@ export function DataImport({ profiles, onBusyChange, onComplete }: { profiles: P
       }
     } catch (error) { setBusy(false); setMessage(error instanceof Error ? error.message : "Import failed. Re-import to resume safely."); }
   }
-  return <section className="space-y-5">
-    <label className="block">Profile<select aria-label="Profile" className="mt-1 w-full rounded border p-3" disabled={busy} value={userId} onChange={e => { setUserId(e.target.value); setConsent(false); }}>
+  return <section className="stack">
+    <label className="block">Profile<select aria-label="Profile" className="mt-1 w-full" disabled={busy} value={userId} onChange={e => { setUserId(e.target.value); setConsent(false); }}>
       {profiles.map(p => <option key={p.id} value={p.id}>{p.name}{p.kind === "dependent" ? " · Dependent" : ""}</option>)}
     </select></label>
     <label className="flex items-start gap-3"><input className="mt-1" type="checkbox" checked={consent} disabled={busy} onChange={e => setConsent(e.target.checked)} />
       <span>{selected?.kind === "dependent" ? "I give guardian consent to store and process this dependent’s health readings." : "I consent to HMS storing and processing my health readings."} Data is stored in Supabase in India. You can withdraw consent and delete data. This does not give a doctor access.</span>
     </label>
-    <p className="text-sm"><a className="underline" href="/legal/privacy" target="_blank" rel="noreferrer">Read the privacy notice</a>. Guardian consent verification must be approved before using real children’s data.</p>
-    <label className="block">Single health export<input aria-label="Health export" className="mt-2 block w-full max-w-full rounded border p-3 text-sm" type="file" accept=".zip,.csv,text/csv,application/zip" disabled={busy} onChange={e => {
+    <p className="muted"><a className="underline" href="/legal/privacy" target="_blank" rel="noreferrer">Read the privacy notice</a>. Guardian consent verification must be approved before using real children’s data.</p>
+    <label className="block">Single health export<input aria-label="Health export" className="mt-2 block w-full max-w-full" type="file" accept=".zip,.csv,text/csv,application/zip" disabled={busy} onChange={e => {
       const selectedFile = e.target.files?.[0]; setFiles(selectedFile ? [selectedFile] : []); setSelection(selectedFile ? selectedFile.name : "");
       setKey(current => current === "Google Health folder" ? "CSV" : current);
     }} /></label>
-    <label className="block">Google Fit or health CSV folder<input ref={folderInput} aria-label="Health CSV folder" className="mt-2 block w-full max-w-full rounded border p-3 text-sm" type="file" accept=".csv,text/csv" multiple disabled={busy} onChange={e => {
+    <label className="block">Google Fit or health CSV folder<input ref={folderInput} aria-label="Health CSV folder" className="mt-2 block w-full max-w-full" type="file" accept=".csv,text/csv" multiple disabled={busy} onChange={e => {
       const all = Array.from(e.target.files || []), csv = all.filter(candidate => /\.csv$/i.test(candidate.name));
       setFiles(csv); setKey(current => current === "CSV" ? "Google Health folder" : current);
       setSelection(csv.length ? csv.length.toLocaleString() + " CSV files selected" + (all.length > csv.length ? "; " + (all.length - csv.length).toLocaleString() + " other files ignored" : "") : "No CSV files found in that folder");
     }} /></label>
-    {selection && <p className="text-sm" role="status">{selection}</p>}
-    <label className="block">CSV source name<input className="mt-1 w-full rounded border p-3" maxLength={200} value={key} disabled={busy} onChange={e => setKey(e.target.value)} /></label>
-    <p className="text-sm">Folders are read recursively on this device. HMS recognises its four-column template, legacy Google Fit Daily activity metrics, and Google Health Takeout readings for heart rate, resting heart rate, steps, calories, RMSSD HRV, SpO₂, respiratory rate, skin temperature and weight. Account files, settings, empty datasets and unrecognised CSVs are named and skipped. Use the same source name when re-importing. <a className="underline" href="/api/ingestion/template">Download CSV template</a>.</p>
+    {selection && <p className="muted" role="status">{selection}</p>}
+    <label className="block">CSV source name<input className="mt-1 w-full" maxLength={200} value={key} disabled={busy} onChange={e => setKey(e.target.value)} /></label>
+    <p className="muted">Folders are read recursively on this device. HMS recognises its four-column template, legacy Google Fit Daily activity metrics, and Google Health Takeout readings for heart rate, resting heart rate, steps, calories, RMSSD HRV, SpO₂, respiratory rate, skin temperature and weight. Account files, settings, empty datasets and unrecognised CSVs are named and skipped. Use the same source name when re-importing. <a className="underline" href="/api/ingestion/template">Download CSV template</a>.</p>
     <button className="button" disabled={busy || !consent || !files.length} onClick={() => void start(false)}>Import selected data</button>
     {busy && <button className="button secondary ml-3" onClick={() => { abort.current?.abort(); worker.current?.postMessage({ action: "cancel" } satisfies ImportRequest); }}>Cancel import</button>}
-    <p className="text-sm">Keep this tab open while importing. If interrupted, select the file again. Saved readings are not duplicated. Unsupported types or invalid rows are counted and skipped.</p>
-    {progress && <div role="status" data-testid="import-progress" data-status={progress.status} data-inserted={progress.inserted} data-skipped={progress.skipped} data-file-count={progress.fileCount} data-skipped-files={progress.skippedFiles} className="rounded border p-4">
+    <p className="muted">Keep this tab open while importing. If interrupted, select the file again. Saved readings are not duplicated. Unsupported types or invalid rows are counted and skipped.</p>
+    {progress && <div role="status" data-testid="import-progress" data-status={progress.status} data-inserted={progress.inserted} data-skipped={progress.skipped} data-file-count={progress.fileCount} data-skipped-files={progress.skippedFiles} className="panel stack">
       <p>{progress.status === "done" ? "Import complete" : progress.status === "working" ? "Importing" : "Import stopped"}</p>
       {progress.fileCount && <p>{progress.fileName ? progress.fileName + " · " : ""}{progress.fileIndex?.toLocaleString()} of {progress.fileCount.toLocaleString()} files. {(progress.supportedFiles || 0).toLocaleString()} health files recognised; {(progress.skippedFiles || 0).toLocaleString()} nonmetric or unsupported files skipped.</p>}
       <progress className="w-full" max={Math.max(1, progress.totalBytes)} value={progress.bytes} />
       <p>{progress.records.toLocaleString()} records read. {progress.inserted.toLocaleString()} added. {progress.skipped.toLocaleString()} duplicates. {progress.unsupported.toLocaleString()} unsupported or invalid.</p>
     </div>}
     {message && <p role="status">{message}</p>}
-    <div className="space-y-3 rounded border p-4"><h2 className="text-xl font-semibold">Try sample data</h2>
-      <label className="block">Sample persona<select aria-label="Sample persona" value={persona} disabled={busy} onChange={e => setPersona(e.target.value as Persona)} className="mt-1 w-full rounded border p-3">
+    <div className="card stack"><h2 className="type-section">Try sample data</h2>
+      <label className="block">Sample persona<select aria-label="Sample persona" value={persona} disabled={busy} onChange={e => setPersona(e.target.value as Persona)} className="mt-1 w-full">
         {Object.entries(personas).map(([id, p]) => <option key={id} value={id}>{p.name}</option>)}
       </select></label>
-      <p className="text-sm">90 days of synthetic readings. Always labelled Sample data.</p>
+      <p className="muted">90 days of synthetic readings. Always labelled Sample data.</p>
       <button className="button secondary" disabled={busy || !consent} onClick={() => void start(true)}>Load sample data</button>
     </div>
   </section>;

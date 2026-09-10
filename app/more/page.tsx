@@ -4,7 +4,7 @@ export default async function MorePage({searchParams}:{searchParams:Promise<{pro
   const {view,profiles}=await patientPage("today",(await searchParams).profile);
   const suffix="?profile="+view.profile.id;
   return <AppFrame profile={view.profile} profiles={profiles}><h1 className="page-title">More</h1><div className="stack">
-    <section className="card">{[["Devices & data","/more/data"],["Data freshness & latency","/more/advanced/latency"],["Cycle tracking","/more/cycle"],["Advanced","/more/advanced"]].map(([name,href])=><a className="list-row" key={href} href={href+suffix}><span>{name}</span><span aria-hidden>↗</span></a>)}<a className="list-row" href="/account">Your account <span aria-hidden>↗</span></a><a className="list-row" href="/legal/disclaimer">Health disclaimer <span aria-hidden>↗</span></a></section>
+    <section className="card">{[["Devices & data","/more/data"],["Data freshness & latency","/more/advanced/latency"],["Cycle tracking","/more/cycle"],["Advanced","/more/advanced"]].map(([name,href])=><a className="list-row" key={href} href={href+suffix}><span>{name}</span></a>)}<a className="list-row" href="/account">Your account</a><a className="list-row" href="/legal/disclaimer">Health disclaimer</a></section>
     <section className="card stack"><a className="list-row" href="/more/family">Family and caregivers</a><a className="list-row" href="/doctor">Doctor portal and registration</a></section>
     <section className="card"><a className="list-row" href="/more/devices">Which device?</a><a className="list-row" href="/more/pharmacy">Pharmacy</a></section>
     <section className="card"><a className="list-row" href="/legal/privacy">Privacy notice</a><a className="list-row" href="/legal/terms">Terms of use</a></section>

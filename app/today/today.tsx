@@ -1,9 +1,25 @@
 "use client";
-import { useEffect,useState } from "react";
+import { useEffect,useState,useSyncExternalStore } from "react";
 import { patientPost,readView,type PatientView } from "@/src/lib/patient/model";
 import { useRealtimePatientView } from "@/src/lib/patient/realtime";
 import { AlertIcon } from "../ui/icons";
-export function Today({initial}:{initial:PatientView}) {
+const STALE_AFTER_MS=6*60*60*1000;
+function subscribeMinute(callback:()=>void) { const timer=setInterval(callback,60000); return ()=>clearInterval(timer); }
+function formatDate(day:string) { const date=new Date(day+"T00:00:00Z"); return Number.isNaN(date.getTime())?day:date.toLocaleDateString("en-GB",{weekday:"long",timeZone:"UTC"})+", "+date.toLocaleDateString("en-GB",{day:"numeric",month:"long",timeZone:"UTC"}); }
+// §7.5: freshness comes from the newest summary computation, which happens whenever new readings land.
+function Freshness({syncedAt,timezone}:{syncedAt:string|null;timezone:string}) {
+  // The clock ticks once a minute; the server snapshot is null so the first paint never disagrees with hydration.
+  const now=useSyncExternalStore(subscribeMinute,()=>Math.floor(Date.now()/60000)*60000,()=>null);
+  const synced=syncedAt?Date.parse(syncedAt):NaN;
+  const age=now!==null&&Number.isFinite(synced)?now-synced:null;
+  const stale=age===null||age>STALE_AFTER_MS;
+  let text="Checking last sync…";
+  if(now!==null&&!Number.isFinite(synced)) text="Not synced yet";
+  else if(age!==null&&!stale) { const minutes=Math.floor(age/60000); text=minutes<1?"Synced just now":minutes<60?"Synced "+minutes+(minutes===1?" minute ago":" minutes ago"):"Synced "+Math.floor(minutes/60)+(Math.floor(minutes/60)===1?" hour ago":" hours ago"); }
+  else if(age!==null) text="Last synced "+new Date(synced).toLocaleString("en-GB",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit",timeZone:timezone});
+  return <p className="freshness"><span className={"freshness-dot"+(stale?" stale":"")} aria-hidden="true"/><span>{text}</span></p>;
+}
+export function Today({initial,today}:{initial:PatientView;today:string}) {
   const {view,setView,live}=useRealtimePatientView(initial,"today");
   const [message,setMessage]=useState(""),[busy,setBusy]=useState(false);
   const userId=initial.profile.id;
@@ -35,6 +51,7 @@ export function Today({initial}:{initial:PatientView}) {
     catch(error){setMessage(error instanceof Error?error.message:"Please try again.");} finally{setBusy(false);}
   }
   return <div className="stack">
+    <header className="page-header"><h1 className="page-title">Today</h1><p className="page-date">{formatDate(today)}</p><Freshness syncedAt={summary?.computed_at??null} timezone={view.profile.timezone}/></header>
     <p className="muted" role="status"><span className={live==="live"?"live-dot":"live-dot offline"} aria-hidden="true" /> {live==="live"?"Live updates connected":live==="connecting"?"Connecting live updates…":"Live connection interrupted; retrying automatically"}</p>
     <section className={"card stack "+alertClass} data-testid="today-hero">
       {(view.contains_sample || alert?.is_sample) && <span className="badge">Sample data</span>}
