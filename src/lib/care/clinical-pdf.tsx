@@ -1,24 +1,26 @@
 import {resolve} from "node:path";
 import {Document,Page,Text,View,Svg,Path,Circle,StyleSheet,renderToBuffer,Font} from "@react-pdf/renderer";
 import {clinicalMetrics,clinicalNumber,clinicalTrend,type ClinicalBody} from "./clinical-model";
+import {colourTokens} from "../design/tokens";
+const pdf=colourTokens.light;
 
 const families=["HMS Noto","HMS Devanagari"];
 Font.register({family:families[0],src:resolve("public/fonts/NotoSans-Regular.ttf")});
 Font.register({family:families[1],src:resolve("public/fonts/NotoSansDevanagari-Regular.ttf")});
 export class UnsupportedPdfText extends Error {}
 const styles=StyleSheet.create({
-  page:{padding:32,fontFamily:families,fontSize:9,color:"#132f47"},
-  title:{fontSize:24,fontFamily:"Helvetica-Bold"},muted:{color:"#526879",fontSize:8},
-  header:{borderBottomWidth:1,borderBottomColor:"#cedee5",paddingBottom:10,marginBottom:9},
+  page:{padding:32,fontFamily:families,fontSize:9,color:pdf.ink},
+  title:{fontSize:24,fontFamily:"Helvetica-Bold"},muted:{color:pdf.inkSoft,fontSize:8},
+  header:{borderBottomWidth:1,borderBottomColor:pdf.rule,paddingBottom:10,marginBottom:9},
   section:{fontSize:11,fontFamily:"Helvetica-Bold",marginTop:10,marginBottom:5},
   grid:{display:"flex",flexDirection:"row",flexWrap:"wrap",gap:8},
   itemGrid:{display:"flex",flexDirection:"row",flexWrap:"wrap",columnGap:8,rowGap:0},
-  card:{width:261,height:79,padding:8,borderWidth:1,borderColor:"#d8e6ea",borderRadius:5},
+  card:{width:261,height:79,padding:8,borderWidth:1,borderColor:pdf.rule,borderRadius:5},
   cardTitle:{fontFamily:"Helvetica-Bold",fontSize:10,marginBottom:2},
-  badge:{fontFamily:"Helvetica-Bold",fontSize:9,color:"#006964",marginTop:4},
+  badge:{fontFamily:"Helvetica-Bold",fontSize:9,color:pdf.accent,marginTop:4},
   item:{width:261,minHeight:22,fontSize:8,maxLines:2,textOverflow:"ellipsis"},
   medicine:{width:530,minHeight:20,fontSize:8},
-  footer:{position:"absolute",left:32,right:32,bottom:25,borderTopWidth:1,borderTopColor:"#cedee5",paddingTop:8,fontSize:8},
+  footer:{position:"absolute",left:32,right:32,bottom:25,borderTopWidth:1,borderTopColor:pdf.rule,paddingTop:8,fontSize:8},
 });
 const shorten=(value:string,max:number)=>value.length>max?value.slice(0,max-3)+"...":value;
 // Explicit measured breaks also handle long identifiers. No medication text is discarded
@@ -41,12 +43,12 @@ function MetricCard({body,metric}:{body:ClinicalBody;metric:typeof clinicalMetri
     <Text style={styles.cardTitle}>{metric.label} ({metric.unit})</Text>
     {trend.n?<>
       <Svg viewBox="0 0 228 44" width={228} height={26}>
-        {trend.segments.map((d,i)=><Path key={i} d={d} fill="none" stroke="#00736e" strokeWidth={1.3}/>)}
-        {trend.points.filter(p=>p.y!==null).map(p=><Circle key={p.day} cx={p.x} cy={p.y!} r={.9} fill="#00736e"/>)}
+        {trend.segments.map((d,i)=><Path key={i} d={d} fill="none" stroke={pdf.data} strokeWidth={1.3}/>)}
+        {trend.points.filter(p=>p.y!==null).map(p=><Circle key={p.day} cx={p.x} cy={p.y!} r={.9} fill={pdf.data}/>)}
       </Svg>
       <Text>{second?"Systolic":"Daily"} mean {clinicalNumber(trend.mean)} - {trend.n}/{body.days} recorded days</Text>
       <Text style={styles.muted}>{second?"Diastolic mean "+clinicalNumber(second.mean)+" ("+second.n+" days)":"First "+clinicalNumber(trend.first)+" / last "+clinicalNumber(trend.last)}</Text>
-    </>:<Text style={{marginTop:17,color:"#526879"}}>{second?.n?"Systolic not recorded. Diastolic mean "+clinicalNumber(second.mean)+" ("+second.n+" days).":"No recorded days in this period."}</Text>}
+    </>:<Text style={{marginTop:17,color:pdf.inkSoft}}>{second?.n?"Systolic not recorded. Diastolic mean "+clinicalNumber(second.mean)+" ("+second.n+" days).":"No recorded days in this period."}</Text>}
   </View>;
 }
 export function ClinicalPdf({body}:{body:ClinicalBody}) {

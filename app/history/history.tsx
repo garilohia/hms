@@ -5,7 +5,7 @@ import { addDays } from "@/src/lib/analytics/time";
 import { chartMetrics,chartSeries,type ChartMetric } from "@/src/lib/patient/chart";
 import { patientPost,readView,type PatientView,type Summary } from "@/src/lib/patient/model";
 import {DocumentUpload} from "./document-upload";
-const phaseColours:Record<string,string>={menstrual:"#f4c2ca",follicular:"#c0eae0",ovulatory:"#efd695",luteal:"#d9d2f1"};
+const phaseColours:Record<string,string>={menstrual:"var(--band)",follicular:"var(--surface-2)",ovulatory:"var(--band)",luteal:"var(--surface-2)"};
 export function History({initial,today}:{initial:PatientView;today:string}) {
   const [view,setView]=useState(initial),[metric,setMetric]=useState<ChartMetric>("RHR"),[range,setRange]=useState("90"),[selected,setSelected]=useState<Summary|null>(null),[error,setError]=useState(""),[busy,setBusy]=useState(false);
   const [device,setDevice]=useState<{id:string;label:string}|null>(null),[docs,setDocs]=useState<PatientView|null>(null),[alerts,setAlerts]=useState<PatientView|null>(null),[alertDay,setAlertDay]=useState<string|null>(null);
@@ -49,11 +49,11 @@ export function History({initial,today}:{initial:PatientView;today:string}) {
         }}>
           <title>{metric+" daily history. Gaps mean missing readings. Use the day picker below for values and source details."}</title>
           {metric==="Temp"&&initial.profile.cycle_tracking_enabled&&(view.cycles??[]).filter(c=>phaseColours[c.phase]&&rows.some(r=>r.day===c.day)).map(c=><rect key={c.day} data-testid="cycle-phase" x={Math.max(40,series.x(c.day)-2)} y={25} width={Math.max(3,520/Math.max(1,rows.length))} height={175} fill={phaseColours[c.phase]}><title>{c.day+": "+c.phase+" estimate ("+c.confidence+")"}</title></rect>)}
-          <line x1="40" y1="200" x2="570" y2="200" stroke="#c9d5df"/>
+          <line x1="40" y1="200" x2="570" y2="200" stroke="var(--rule)"/>
           <text x="4" y="40">{series.max.toFixed(1)}</text><text x="4" y="197">{series.min.toFixed(1)}</text>
-          {series.segments.map((path,i)=><path key={i} d={path} stroke="#006c68" strokeWidth="2.5" fill="none"/>)}
-          {series.points.filter(p=>p.y!==null).map(p=><circle className="chart-point" key={p.row.day} role="button" aria-label={"Reading "+p.row.day} cx={p.x} cy={p.y!} r={4} fill="#006c68" stroke="white" strokeWidth={1} onClick={()=>setSelected(p.row)}><title>{p.row.day+": "+p.value+" "+config.unit}</title></circle>)}
-          {(view.markers??[]).filter(m=>rows.some(r=>r.day===m.day)).map(m=><g key={m.day} data-testid="alert-marker" data-acknowledged={m.acknowledged} role="button" aria-label={"Alerts "+m.day} onClick={()=>void showAlerts(m.day)}><circle cx={series.x(m.day)} cy={214} r={6} fill={m.acknowledged?"#687989":"#b35024"}/><title>{m.count+" unusual readings on "+m.day}</title></g>)}
+          {series.segments.map((path,i)=><path key={i} d={path} stroke="var(--data)" strokeWidth="1.5" fill="none"/>)}
+          {series.points.filter(p=>p.y!==null).map(p=><circle className="chart-point" key={p.row.day} role="button" aria-label={"Reading "+p.row.day} cx={p.x} cy={p.y!} r={4} fill="var(--data)" stroke="var(--surface)" strokeWidth={1} onClick={()=>setSelected(p.row)}><title>{p.row.day+": "+p.value+" "+config.unit}</title></circle>)}
+          {(view.markers??[]).filter(m=>rows.some(r=>r.day===m.day)).map(m=><g key={m.day} data-testid="alert-marker" data-acknowledged={m.acknowledged} role="button" aria-label={"Alerts "+m.day} onClick={()=>void showAlerts(m.day)}><circle cx={series.x(m.day)} cy={214} r={6} fill="var(--urgent)"/><title>{m.count+" unusual readings on "+m.day}</title></g>)}
           <text x="44" y="241">{series.points[0]?.row.day}</text><text x="565" y="241" textAnchor="end">{series.points.at(-1)?.row.day}</text>
         </svg>
         <label className="form-field">Reading day<select value={selected?.day??""} onChange={e=>setSelected(rows.find(r=>r.day===e.target.value)??null)}><option value="">Choose a point or day</option>{rows.map(r=><option key={r.day} value={r.day}>{r.day}</option>)}</select></label>
@@ -69,7 +69,7 @@ export function History({initial,today}:{initial:PatientView;today:string}) {
       {range==="All"&&<button className="button secondary" disabled={busy} onClick={()=>void load("All")}>Latest history</button>}
     </section>
     {view.can_read_alerts&&(view.markers?.length??0)>0&&<section className="card stack"><h2 className="font-semibold">Unusual readings</h2><p className="muted">Markers remain here after acknowledgement.</p><div className="chips">{(view.markers??[]).filter(m=>rows.some(r=>r.day===m.day)).map(m=><button key={m.day} disabled={busy} onClick={()=>void showAlerts(m.day)}>{m.day} · {m.count}{m.acknowledged?" · acknowledged":""}</button>)}</div>
-      {alerts?.alerts?.map(a=><article key={a.id} className="stack border-t border-slate-200 pt-4">{a.is_sample&&<span className="badge">Sample data</span>}<p>{a.metric_snapshot.body}</p><p className="muted">{a.acknowledged_at?"Acknowledged":"Unacknowledged"} · {a.severity}</p></article>)}
+      {alerts?.alerts?.map(a=><article key={a.id} className="stack border-t border-rule pt-4">{a.is_sample&&<span className="badge">Sample data</span>}<p>{a.metric_snapshot.body}</p><p className="muted">{a.acknowledged_at?"Acknowledged":"Unacknowledged"} · {a.severity}</p></article>)}
       {alerts?.next_cursor&&alertDay&&<button className="button secondary" disabled={busy} onClick={()=>void showAlerts(alertDay,alerts.next_cursor)}>More readings for this day</button>}
     </section>}
     <section className="card stack"><h2 className="text-lg font-semibold">Documents</h2>{!docs?<p>Loading documents…</p>:docs.documents?.length?docs.documents.map(d=><div key={d.id} className="list-row"><a href={"/api/documents/"+d.id} className="underline">{d.title}<span className="block muted">{d.type.replaceAll("_"," ")} · Download</span></a></div>):<p className="muted">No documents added.</p>}

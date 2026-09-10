@@ -81,8 +81,8 @@ export function DataImport({ profiles, onBusyChange, onComplete }: { profiles: P
     {selection && <p className="text-sm" role="status">{selection}</p>}
     <label className="block">CSV source name<input className="mt-1 w-full rounded border p-3" maxLength={200} value={key} disabled={busy} onChange={e => setKey(e.target.value)} /></label>
     <p className="text-sm">Folders are read recursively on this device. HMS recognises its four-column template, legacy Google Fit Daily activity metrics, and Google Health Takeout readings for heart rate, resting heart rate, steps, calories, RMSSD HRV, SpO₂, respiratory rate, skin temperature and weight. Account files, settings, empty datasets and unrecognised CSVs are named and skipped. Use the same source name when re-importing. <a className="underline" href="/api/ingestion/template">Download CSV template</a>.</p>
-    <button className="rounded bg-slate-900 px-5 py-3 text-white disabled:opacity-40" disabled={busy || !consent || !files.length} onClick={() => void start(false)}>Import selected data</button>
-    {busy && <button className="ml-3 rounded border px-5 py-3" onClick={() => { abort.current?.abort(); worker.current?.postMessage({ action: "cancel" } satisfies ImportRequest); }}>Cancel import</button>}
+    <button className="button" disabled={busy || !consent || !files.length} onClick={() => void start(false)}>Import selected data</button>
+    {busy && <button className="button secondary ml-3" onClick={() => { abort.current?.abort(); worker.current?.postMessage({ action: "cancel" } satisfies ImportRequest); }}>Cancel import</button>}
     <p className="text-sm">Keep this tab open while importing. If interrupted, select the file again. Saved readings are not duplicated. Unsupported types or invalid rows are counted and skipped.</p>
     {progress && <div role="status" data-testid="import-progress" data-status={progress.status} data-inserted={progress.inserted} data-skipped={progress.skipped} data-file-count={progress.fileCount} data-skipped-files={progress.skippedFiles} className="rounded border p-4">
       <p>{progress.status === "done" ? "Import complete" : progress.status === "working" ? "Importing" : "Import stopped"}</p>
@@ -96,7 +96,7 @@ export function DataImport({ profiles, onBusyChange, onComplete }: { profiles: P
         {Object.entries(personas).map(([id, p]) => <option key={id} value={id}>{p.name}</option>)}
       </select></label>
       <p className="text-sm">90 days of synthetic readings. Always labelled Sample data.</p>
-      <button className="rounded border px-4 py-2 disabled:opacity-40" disabled={busy || !consent} onClick={() => void start(true)}>Load sample data</button>
+      <button className="button secondary" disabled={busy || !consent} onClick={() => void start(true)}>Load sample data</button>
     </div>
   </section>;
 }

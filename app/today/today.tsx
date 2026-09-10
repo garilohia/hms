@@ -2,6 +2,7 @@
 import { useEffect,useState } from "react";
 import { patientPost,readView,type PatientView } from "@/src/lib/patient/model";
 import { useRealtimePatientView } from "@/src/lib/patient/realtime";
+import { AlertIcon } from "../ui/icons";
 export function Today({initial}:{initial:PatientView}) {
   const {view,setView,live}=useRealtimePatientView(initial,"today");
   const [message,setMessage]=useState(""),[busy,setBusy]=useState(false);
@@ -25,6 +26,8 @@ export function Today({initial}:{initial:PatientView}) {
     return ()=>controller.abort();
   },[initial,userId,setView]);
   const summary=view.summaries?.[0],alert=view.alerts?.[0];
+  // §6: two visual states. Urgent keeps its own rule; every other severity uses the attention pattern.
+  const alertClass=alert?(alert.severity==="urgent"?"alert-urgent":"alert-attention"):"";
   async function acknowledge() {
     if(!alert) return;
     setBusy(true);setMessage("");
@@ -33,21 +36,22 @@ export function Today({initial}:{initial:PatientView}) {
   }
   return <div className="stack">
     <p className="muted" role="status"><span className={live==="live"?"live-dot":"live-dot offline"} aria-hidden="true" /> {live==="live"?"Live updates connected":live==="connecting"?"Connecting live updates…":"Live connection interrupted; retrying automatically"}</p>
-    <section className={"card hero stack "+(alert?.severity||"")} data-testid="today-hero">
+    <section className={"card stack "+alertClass} data-testid="today-hero">
       {(view.contains_sample || alert?.is_sample) && <span className="badge">Sample data</span>}
       {view.consent_given_by_guardian && <p className="muted">Consent given by guardian</p>}
       {alert?<>
-        <h2 className="text-xl font-semibold capitalize">{alert.severity} reading</h2>
+        <div className="alert-label"><AlertIcon severity={alert.severity}/><h2 className="sentence">{alert.severity} reading</h2></div>
         <p>{alert.metric_snapshot.body}</p>
         {alert.is_historical && <p className="muted">Historical sample event. No external notification was sent.</p>}
         {view.can_manage?<button className="button secondary" disabled={busy} onClick={()=>void acknowledge()}>Acknowledge reading</button>:<p className="muted">Read-only shared view</p>}
         {(view.active_alert_count??0)>1 && <p className="muted">{view.active_alert_count} unacknowledged readings. The highest priority is shown first.</p>}
       </>:summary?<>
-        <h2 className="text-lg">Your readiness</h2><p className="hero-score">{summary.readiness_score??"—"}<span className="text-lg tracking-normal">{summary.readiness_score!==null?" / 100":""}</span></p>
+        <h2 className="type-section">Your readiness</h2>
+        <p className="hero-figure"><span className="hero-score">{summary.readiness_score??"—"}</span>{summary.readiness_score!==null&&<span className="unit">/ 100</span>}</p>
         <p>{summary.readiness_score===null?"A score needs resting heart rate, HRV and sleep, with at least seven prior days for each.":"A guide to your recent recovery. Not a medical assessment."}</p>
         <p className="muted">Latest readings: {summary.day}. Resting HR {summary.rhr??"—"} bpm · HRV {summary.hrv_avg===null?"—":Math.round(summary.hrv_avg)} ms · Sleep {summary.sleep_duration_min===null?"—":(summary.sleep_duration_min/60).toFixed(1)} h.</p>
         <a className="underline text-sm" href={"/more/advanced?profile="+userId}>How this score works</a>
-      </>:<><h2 className="text-2xl font-semibold">Your history starts here.</h2><p>Import your readings or explore clearly labelled sample data.</p>{view.can_manage&&<a className="button secondary" href={"/more/data?profile="+userId}>Connect data</a>}</>}
+      </>:<><h2 className="type-section">Your history starts here.</h2><p>Import your readings or explore clearly labelled sample data.</p>{view.can_manage&&<a className="button secondary" href={"/more/data?profile="+userId}>Connect data</a>}</>}
       {message&&<p role="status" className="muted">{message}</p>}
     </section>
     {(view.insights??[]).slice(0,3).map(insight=><article className="card insight stack" key={insight.id} data-testid="insight-card">

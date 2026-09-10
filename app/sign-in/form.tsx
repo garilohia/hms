@@ -35,10 +35,10 @@ export function SignInForm({showTestLogin=false}:{showTestLogin?:boolean}) {
     {mode === "signup" && <>
       <label className="block">Name<input name="name" autoComplete="name" maxLength={120} required className="mt-2 w-full rounded-lg border p-3" /></label>
       <label className="block">Date of birth<input name="dob" type="date" required className="mt-2 w-full rounded-lg border p-3" /></label>
-      <p className="text-sm text-zinc-600">Under 18? Your guardian creates a dependent profile from their account.</p>
+      <p className="muted">Under 18? Your guardian creates a dependent profile from their account.</p>
     </>}
-    <button disabled={busy} className="w-full rounded-lg bg-teal-800 p-3 font-medium text-white disabled:opacity-60">{busy ? "Sending…" : "Email me a sign-in link"}</button>
-    {showTestLogin&&<div className="space-y-3 border-t border-zinc-200 pt-5"><button type="button" disabled={busy} onClick={()=>void testLogin()} className="w-full rounded-lg border border-teal-800 bg-white p-3 font-medium text-teal-900 disabled:opacity-60">{busy?"Opening test account…":"Continue as test user"}</button><p className="text-sm text-zinc-600">Local development only. Creates a real Supabase session without sending email.</p></div>}
+    <button disabled={busy} className="button w-full">{busy ? "Sending…" : "Email me a sign-in link"}</button>
+    {showTestLogin&&<div className="space-y-3 border-t border-rule pt-5"><button type="button" disabled={busy} onClick={()=>void testLogin()} className="button secondary w-full">{busy?"Opening test account…":"Continue as test user"}</button><p className="muted">Local development only. Creates a real Supabase session without sending email.</p></div>}
     <p role="status" aria-live="polite">{message}</p>
   </form>;
 }

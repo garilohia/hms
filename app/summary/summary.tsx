@@ -23,7 +23,7 @@ export function ClinicalSummary({initial,owner}:{initial:z.infer<typeof clinical
     <p className="muted">Downloads cannot be remotely revoked. Share only with people you choose.</p><p role="status">{status}</p>
   </section>
   {clinicalMetrics.map(metric=>{const trend=clinicalTrend(body,metric.key);return <section key={metric.key} className="card stack"><h2>{metric.label}</h2><p>Daily mean {clinicalNumber(trend.mean)} {metric.unit} · {trend.n}/{body.days} recorded days</p>
-    {trend.n>0&&<svg viewBox="0 0 228 44" role="img" aria-label={metric.label+" daily trend"}>{trend.segments.map((d,i)=><path key={i} d={d} fill="none" stroke="#00736e" strokeWidth={1.2}/>)}{trend.points.filter(p=>p.y!==null).map(p=><circle key={p.day} cx={p.x} cy={p.y!} r={.8} fill="#00736e"/>)}</svg>}
+    {trend.n>0&&<svg viewBox="0 0 228 44" role="img" aria-label={metric.label+" daily trend"}>{trend.segments.map((d,i)=><path key={i} d={d} fill="none" stroke="var(--data)" strokeWidth={1.2}/>)}{trend.points.filter(p=>p.y!==null).map(p=><circle key={p.day} cx={p.x} cy={p.y!} r={.8} fill="var(--data)"/>)}</svg>}
     {metric.key==="bp_systolic"&&<p className="muted">Diastolic mean {clinicalNumber(clinicalTrend(body,"bp_diastolic").mean)} mmHg</p>}</section>;})}
   <section className="card stack"><h2>Unusual readings</h2><p>{body.alert_counts.length?body.alert_counts.map(a=>a.severity+": "+a.count).join(" · "):"No recorded alerts in this period."}</p></section>
   <section className="card stack"><h2>Reported medications</h2>{body.medications.length?<ul>{body.medications.map((m,i)=><li key={i}>{m}</li>)}</ul>:<p className="muted">Not recorded. This does not mean none are taken.</p>}
