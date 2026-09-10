@@ -17,7 +17,7 @@ The original large streaming-import and shorter verification matrix evidence rem
 7. Doctor registration/verification boundaries, scoped sharing, consultation requests, scheduling, messages, closing notes and immutable 30/90-day clinical summaries/PDFs work. Caregiver invitation, acceptance, read-only access and revocation are audited.
 8. Guardian consent is displayed on summaries/PDFs. Explicit conversion at 18 preserves the health-profile ID and history, requires the receiving adult's consent, and retires mandatory guardian authority. Existing recipient history is not merged or overwritten.
 9. Private original documents, streamed account ZIP export and retryable hard deletion work end to end. Export covers owned profiles, not merely linked patients. Deleting a doctor preserves other patients' consultation history with anonymised references.
-10. A 20-device, manufacturer-sourced catalogue has dated prices/specifications and honest unknowns. Public legal previews and manually requested pharmacy search links are implemented without partner accounts, orders or implied integrations.
+10. A 25-device, manufacturer-sourced catalogue has dated prices/specifications and honest unknowns. It held 20 rows at M7/M8 and was extended to 25 during the post-M8 wearable-coverage pass (D016); PROGRESS.md's M7 entry records the earlier count as history. Public legal previews and manually requested pharmacy search links are implemented without partner accounts, orders or implied integrations.
 
 ## M8 corrections
 
@@ -60,6 +60,8 @@ These are actual passing commands on the M8 worktree. The large-import command p
 - `npm run auth:verify`: both live Supabase auth tests pass, including bearer bootstrap, source registration and immutable batch retry.
 - `npm run alerts:verify`: the protected minute job, alert acknowledgement/settings and local notification path pass.
 - The local signed-in latency dashboard was visually checked at 390 px. Native physical-device and production notification/provider tests remain launch gates.
+- Re-confirmed on 11 September 2026 on `big-changes` at `9b75abd`: `npm run check` (132 unit tests) and `npm run build` (54 routes) pass, and the working tree is clean. The database, live-browser, golden, PDF and large-import suites were not re-executed on that date; their evidence is the 10 September run above.
+- The device catalogue was extended from 20 to 25 manufacturer-sourced rows in this pass, adding connection-path, update-class and expected-delay fields per D016 and D024.
 
 The two final import reports are retained in `docs/verification/m8-ingestion.json`. Their first/second test durations were 559,484/555,669 ms and 528,488/532,773 ms; peak renderer RSS was 194,609,152 and 236,044,288 bytes. Earlier host-sleep interruptions and deadline failures are accurately retained in PROGRESS.md and are not counted. Their exact synthetic fixtures were removed and checked absent; seeded samples remain intentionally.
 
@@ -78,7 +80,7 @@ The two final import reports are retained in `docs/verification/m8-ingestion.jso
 ## Exact next steps
 
 1. **Use the existing infrastructure.** Keep Supabase in Mumbai. For a fresh environment, use Node 24/npm 11.19.0, `npm ci`, `npm run db:migrate`, `npm run storage:setup` and the documented seed commands. Preserve existing `.env.local`; never commit it. Keep `SUPABASE_SECRET_KEY`, `DATABASE_URL` and `CONSENT_IP_SALT` server-only. Public clients use `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`.
-2. **Choose and push the Git remote.** No remote is configured. Push the verified `main` to the founder's chosen repository and observe the configured quality/database GitHub Actions jobs; local success is not a hosted-CI result.
+2. **Observe a hosted CI run.** The remote is configured: `origin` → `https://github.com/garilohia/hms.git`, with `big-changes` tracking it and local `main` one commit ahead of `origin/main` as of 11 September 2026 (that commit is already in `origin/big-changes`). Push the branch the founder wants to release from and observe the configured quality/database GitHub Actions jobs; local success is not a hosted-CI result (OQ002).
 3. **Configure the founder's Vercel project and deploy.** The founder must authenticate/link the intended project and supply its environment variables. Set the final HTTPS `NEXT_PUBLIC_APP_URL`, use the supported Node runtime and smoke-test the deployed build. No login, terms acceptance or spending was performed by this build.
 4. **Finish Auth delivery setup.** Allow the deployed origin and Auth callback/confirmation URLs in Supabase. Configure the email template/SMTP as appropriate and verify a real magic link with an authorised recipient. Existing tests generate synthetic links without emailing anyone.
 5. **Activate minute scheduling.** Set the same random `CRON_SECRET` (at least 32 characters) in the server environment and restricted Supabase Vault, set the deployed HTTPS origin, then run `npm run cron:setup`. Inspect both `cron.job_run_details` and the HTTP responses in `net._http_response`. Use the Vercel fallback only if the chosen plan supports one-minute cadence; do not run both schedulers.

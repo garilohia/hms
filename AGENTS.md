@@ -28,7 +28,7 @@ Project: Health Management System (HMS). Full spec in PLAN.md — read it first,
 
 ## Boundaries
 - Do not create third-party accounts, accept terms, or spend money. Stub behind an interface and note in OPEN_QUESTIONS.md.
-- Apple HealthKit / Google Health Connect / native mobile: out of scope this session.
+- Native mobile: the shared versioned server ingestion contract under `app/api/mobile/*` is in scope and built (D026). Compiled HealthKit / Health Connect clients, signing, store review and physical-device acceptance stay out of scope (OQ009).
 - Any bug taking more than 20 minutes: flag it, isolate it, log it in OPEN_QUESTIONS.md, move on.
 - Ask the founder a question only if the answer would change the architecture. Otherwise decide, record in DECISIONS.md, continue.
 

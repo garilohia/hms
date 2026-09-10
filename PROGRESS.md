@@ -1,13 +1,5 @@
 # Build progress
 
-## Post-M8 — Native readiness, measured latency and safety semantics
-
-- Added a versioned bearer-authenticated mobile bootstrap, native source registration and immutable batch API for future HealthKit and Health Connect clients. Native batches reuse consent, ownership, canonical-unit, future-time, deduplication, summary and alert boundaries.
-- Added private batch receipts with exact-retry results and changed-content refusal, plus an audited 30-day latency report and `/more/advanced/latency` UI for source freshness, per-metric source delay, alert creation and completed delivery timing.
-- Documented encrypted offline queue, token refresh, background scheduling, health-value-free push and physical-device acceptance requirements for iOS and Android. No native binary is claimed because this host lacks full Xcode and Android toolchains.
-- Recorded clinical review, supervised pilot and Vercel Preview environment parity as external launch gates. Missing data is explicitly treated as a feed state, never a medical inference.
-- Added physical-device native acceptance, supervised-pilot, clinical/legal sign-off and provider-connector definition-of-done checklists. External approvals and signed mobile binaries remain pending rather than being marked complete in code.
-
 ## M0 — Repo, tooling, CI
 
 - Built: adopted Next.js 16.3.4/App Router, strict TypeScript, Tailwind and existing Supabase helpers; npm lockfile; public configuration validation; Vitest and Playwright tooling; push/PR GitHub quality workflow; complete tracked environment template; five-line README guide.
@@ -92,11 +84,21 @@
 - The entire shorter verification matrix then passed twice, sequentially and unchanged: `npm run check` (112 tests), production build (47 routes), all 87 database/RLS checks, database advisors, private Storage setup, idempotent seed, summaries, production dependency audit, eight anonymous browser tests, Auth, alerts, all nine golden tests and all six PDF fixtures, followed by `git diff --check`. The golden passes took 7.3 and 7.0 minutes. No test was skipped. OQ008 was resolved and removed; the earlier interrupted attempts remain here as failure history rather than passing evidence.
 - `FINAL_REPORT.md` records the completed scope, evidence, honest cuts and founder launch steps. M8 is committed only after the final repository audit, and `main` advances only to that verified commit; the separate original M4 checkout remains untouched.
 
-## Post-M8 — Google Fit/health CSV folder import
+## Post-M8 (1) — Google Fit/health CSV folder import — 9–10 September 2026
 
 - Added recursive folder selection alongside the existing single Apple Health ZIP/CSV picker. Up to 20,000 CSV files are sorted and streamed sequentially through the existing Web Worker; source files remain on-device and API batch/security boundaries are unchanged.
 - The CSV adapter auto-detects the HMS template, legacy Google Fit Daily activity metrics, and Google Health/Fitbit Takeout canonical physical-activity files. The Takeout mapping covers heart rate, resting heart rate, steps, active/total calories, RMSSD HRV, SpO₂, respiratory rate, skin temperature and weight with exact unit conversion. Date-only legacy rows use the profile timezone; explicit offsets are preserved. Consolidated legacy metrics take precedence over date-named siblings. Google Health account/settings files, empty datasets and duplicate summary formats remain skipped with bounded diagnostics; the UI distinguishes recognised health files from skipped files.
 - Added a wearable connection hub with OAuth-ready Google Health (Fitbit Air, Fitbit and Pixel Watch) and WHOOP links, honest Apple Health export support, and partner-gated Garmin/Ultrahuman states. Provider tokens are encrypted server-side in a forced-RLS private table and every connection is bound to current ownership and processing consent. OAuth buttons remain disabled until founder-supplied provider credentials and the token key are configured.
-- Verification after the Google Health extension: all 446 headers in the supplied Takeout folder were checked locally without printing health values; 35 canonical health CSVs across all ten supported metric families were recognised. `npm run check` passes with 125 unit tests and `npm run build` passes with 47 routes. The focused live browser test imports legacy Google Fit plus Google Health heart-rate/weight files, verifies persistence, then re-imports with zero inserts and ten duplicates. Its synthetic account was removed.
+- Verification after the Google Health extension: all 446 headers in the supplied Takeout folder were checked locally without printing health values; 35 canonical health CSVs across all ten supported metric families were recognised. `npm run check` passed with 125 unit tests and `npm run build` with 47 routes at that commit; both counts have since grown, and the current figures are in the Post-M8 (2) section below. The focused live browser test imports legacy Google Fit plus Google Health heart-rate/weight files, verifies persistence, then re-imports with zero inserts and ten duplicates. Its synthetic account was removed.
 - A real 296,716-reading Google Health folder exposed round-trip latency in the original strictly sequential uploader. Persistence now uses a three-request bounded pipeline while retaining 1,000-reading/1 MiB API limits, idempotency, cancellation and browser-memory backpressure.
 - Added a development-only test-login button backed by a real Supabase magic-link session. It reuses a reserved synthetic profile, sends no email, remains subject to RLS, and is absent/404 in production.
+
+## Post-M8 (2) — Native readiness, measured latency and safety semantics — 10 September 2026
+
+- Added a versioned bearer-authenticated mobile bootstrap, native source registration and immutable batch API for future HealthKit and Health Connect clients. Native batches reuse consent, ownership, canonical-unit, future-time, deduplication, summary and alert boundaries.
+- Added private batch receipts with exact-retry results and changed-content refusal, plus an audited 30-day latency report and `/more/advanced/latency` UI for source freshness, per-metric source delay, alert creation and completed delivery timing.
+- Documented encrypted offline queue, token refresh, background scheduling, health-value-free push and physical-device acceptance requirements for iOS and Android. No native binary is claimed because this host lacks full Xcode and Android toolchains.
+- Recorded clinical review, supervised pilot and Vercel Preview environment parity as external launch gates. Missing data is explicitly treated as a feed state, never a medical inference.
+- Added physical-device native acceptance, supervised-pilot, clinical/legal sign-off and provider-connector definition-of-done checklists. External approvals and signed mobile binaries remain pending rather than being marked complete in code.
+- Verified: `npm run check` (lint, strict typecheck, 132 unit tests) and `npm run build` (54 routes) pass; re-run and confirmed on 11 September 2026. The database, live browser, golden, PDF and large-import evidence for this pass is recorded in FINAL_REPORT.md under “Post-M8 native/freshness verification” and was not re-executed on 11 September 2026.
+- Cut: no signed native binary, vendor approval, supervised pilot or clinical/legal approval is claimed.

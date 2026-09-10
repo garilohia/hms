@@ -16,7 +16,7 @@ During `npm run dev`, the sign-in page includes **Continue as test user**. It cr
 
 `npm run build` verifies production compilation. For browser tests, run `npx playwright install chromium`, then `npm run build && npm run e2e`. Playwright starts the production server on port 3100. Unit tests do not read developer credentials.
 
-The GitHub workflow runs lint, typecheck, tests, build, and browser checks on pushes and pull requests. A Git remote must be configured and pushed before a hosted Actions result can be observed.
+The GitHub workflow runs lint, typecheck, tests, build, and browser checks on pushes and pull requests. The `origin` remote is configured; a branch must still be pushed and its Actions run observed before a hosted CI result can be claimed (OQ002).
 
 ## Configuration and progress
 

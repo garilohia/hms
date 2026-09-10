@@ -44,7 +44,7 @@ What IS the product: the doctor layer, the NRI-to-India bridge, and a clean perp
 - **Resend** for transactional email (stub with a console transport if no API key is present).
 - **Vercel** for deployment (deploy at milestone M7; use `vercel` CLI, fall back to a build-only verification if login is unavailable).
 - Application compute stays within Vercel, Supabase, and the user's browser. Apple Health parsing runs in a browser Web Worker. Supabase `pg_cron` calls an authenticated route handler every minute for summary recomputation and escalation, with Vercel Cron as fallback if it supports that cadence. No separate worker service. See DECISIONS.md D002–D003.
-- No native mobile code tonight. Apple HealthKit and Google Health Connect require native apps and are explicitly OUT OF SCOPE for this session. Design the ingestion layer so a native Expo app can post to the same endpoints later.
+- No native mobile code tonight. Apple HealthKit and Google Health Connect require native apps and are explicitly OUT OF SCOPE for this session. Design the ingestion layer so a native Expo app can post to the same endpoints later. **Post-M8 update (D026):** that shared versioned server contract now exists under `app/api/mobile/*`. Compiled platform clients, signing and physical-device acceptance remain out of scope (OQ009).
 
 ---
 
@@ -97,7 +97,7 @@ Adapters to build tonight, in order:
 4. **Garmin Connect export importer** — account export ZIP (JSON). Map what maps cleanly; skip the rest and log counts.
 5. **Generic CSV importer** — columns: `timestamp,metric_type,value,unit`. Download a template from the UI.
 6. **Aggregator adapter (interface + stub only)** — for Terra / ROOK / Junction. Implement the interface with a clear TODO. Do not sign up for anything.
-7. **Fitbit Web API (OAuth 2.0 PKCE) — STRETCH ONLY.** Attempt only if M0–M7 are complete and verified. Callback at `/api/integrations/fitbit/callback`. Read env `FITBIT_CLIENT_ID`. If absent, the UI shows "coming soon".
+7. **Fitbit Web API (OAuth 2.0 PKCE) — STRETCH ONLY.** Attempt only if M0–M7 are complete and verified. Callback at `/api/integrations/fitbit/callback`. Read env `FITBIT_CLIENT_ID`. If absent, the UI shows "coming soon". **Superseded by D021:** the legacy Fitbit Web API is being retired, so live linking for Fitbit Air, Fitbit and Pixel Watch goes through Google Health OAuth at `/api/integrations/[provider]/callback`, alongside WHOOP. `FITBIT_CLIENT_ID` is not used; the buttons stay disabled until the founder supplies provider credentials (OQ012).
 
 ### 4.3 Analytics engine (pure functions, fully unit-tested)
 
@@ -119,12 +119,12 @@ All in `src/lib/analytics/`. No database access inside these functions; they tak
 
 ### 4.4 Alerts
 
-- Default rules (system): SpO2 < 90% sustained ≥ 10 min (urgent); SpO2 < 92% sustained ≥ 30 min (attention); resting HR > baseline + 4 MAD for ≥ 30 min at rest (attention); HR > 150 or < 40 at rest ≥ 5 min (urgent); skin temp deviation > +1.0 °C ≥ 2 h (attention); any user-entered BP ≥ 180/120 (urgent).
+- Default rules (system): SpO2 < 90% sustained ≥ 10 min (urgent); SpO2 < 92% sustained ≥ 30 min (attention); resting HR > baseline + 4 MAD for ≥ 30 min at rest (attention); HR > 150 or < 40 at rest ≥ 5 min (urgent); skin temp deviation > +1.0 °C ≥ 2 h (attention); any user-entered BP ≥ 180/120 (urgent). **The temperature clause is superseded by D024:** wearable skin/wrist temperature is not core temperature, so no fixed °C cutoff is applied. The shipped defaults replace that clause with sustained high *and* low personal outliers at 4 MAD for ≥ 30 min (attention), evaluated only after at least seven baseline days. That gives eight default rules rather than six; see `src/lib/alerts/rules.ts`.
 - Alert copy must follow this template exactly: "**Unusual reading:** [metric] was [value] at [time]. That's outside your normal range. If you feel unwell, call [local emergency number] or contact your doctor." Never use the words "emergency detected", "dangerous", or "diagnosis".
 - Channels: in-app (always), email (Resend, stub if no key), push (Web Push — implement service worker registration and a test button; stub server if no VAPID keys), emergency contact (email now; SMS/WhatsApp are stubs behind an interface).
 - Escalation: urgent alerts unacknowledged for 15 minutes → notify emergency contact (if consented) → offer one-tap "Request urgent review" to a linked doctor.
 - Store deadlines and pending summary recomputations in Postgres. Supabase `pg_cron`/`pg_net` invokes an authenticated route handler every minute, with Vercel Cron as the same-cadence fallback. Process bounded durable work with overlap/retry protection; recheck acknowledgement, consent, and access before escalation. Do not depend on browser or in-process timers. See DECISIONS.md D003.
-- Users can adjust thresholds under More → Advanced → Alert rules. Defaults are shown with "Recommended" label.
+- Users can adjust thresholds under More → Alert rules (`/more/alerts`), matching §4.8. Defaults are shown with "Recommended" label.
 
 ### 4.5 Doctor side
 
@@ -184,8 +184,8 @@ Work strictly in this order. Do not start a milestone until the previous one pas
 | M6 | Doctor, caregiver, and guardian side | Doctor portal, sharing scopes, consult flow, chat, clinical summary PDF renders correctly for all three personas. Caregiver invite → accept → read-only view → alert forwarding → revoke all work. Guardian-dependent management, guardian consent flag on summaries/PDFs, and conversion at 18 retaining history all work; dependent cannot revoke guardian authority. |
 | M7 | Device comparison + legal + pharmacy stubs + deploy | Catalog seeded and verified; legal pages live; export and delete work; app deployed to Vercel preview URL (or `npm run build` passes if deploy is unavailable) and smoke-tested on the deployed URL. |
 | M8 | Hardening | Run `/review` on the whole repo; fix every finding that is a real bug; run the full test suite twice; write FINAL_REPORT.md. |
-| S1 | Stretch: Fitbit Web API OAuth | Only after M8. Real account connects and syncs 7 days of data. |
-| S2 | Stretch: Fitbit / Garmin export importers | Only after S1 or if S1 is blocked by missing credentials. |
+| S1 | Stretch: Fitbit Web API OAuth — superseded by D021 | Replaced post-M8 by read-only Google Health and WHOOP OAuth connections. Encrypted token storage and bounded seven-day sync are built; the buttons stay disabled until provider credentials exist (OQ012). |
+| S2 | Stretch: Fitbit / Garmin export importers | Fitbit history enters through the Google Health / Takeout CSV folder importer (D020). A Garmin-specific export importer is not shipped and remains a recorded cut. |
 
 ---
 

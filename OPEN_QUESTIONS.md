@@ -1,5 +1,7 @@
 # Open questions
 
+> **Retired identifier.** OQ008 was opened during M8 for a temporary host-sleep interruption and was resolved and removed once the large-import benchmark passed. That number is retired rather than reused, so the references in PROGRESS.md and `docs/verification/m8-review.md` still point at the retired entry. Production wearable-provider access is OQ012 below.
+
 ## OQ001 — Verifiable parental consent before launch
 
 - Founder-specified launch requirement: DPDP Act requires verifiable parental consent for children; the exact verification method needs a lawyer before launch.
@@ -8,10 +10,11 @@
 - Status: unresolved before launch. Recording a guardian's consent is part of the build, but does not by itself resolve the verification requirement.
 - Review DPDP Act section 9, final Rules 2025 rule 10 and the child-monitoring restrictions/exceptions for HMS specifically. Do not assume an independent wellness/facilitation app qualifies for a healthcare exemption. Official sources: [Act](https://www.meity.gov.in/static/uploads/2024/02/Digital-Personal-Data-Protection-Act-2023.pdf), [Rules](https://www.meity.gov.in/static/uploads/2025/11/53450e6e5dc0bfa85ebd78686cadad39.pdf).
 
-## OQ002 — Git remote for hosted CI
+## OQ002 — Hosted CI result still unobserved
 
-- No Git remote is configured in the supplied checkout.
-- The M0 workflow is configured for pushes and pull requests, and its quality commands passed locally. A hosted Actions run requires the founder's chosen repository remote and a push; no remote repository has been created or inferred.
+- Resolved in part: the checkout now has a Git remote, `origin` → `https://github.com/garilohia/hms.git`, and `big-changes` tracks it. The earlier statement that no remote was configured is superseded.
+- Still open: no hosted GitHub Actions result has been observed. The M0 workflow is configured for pushes and pull requests and its quality commands pass locally; local success is not a hosted-CI result.
+- As of 11 September 2026, local `main` is one commit ahead of `origin/main`. That commit is already contained in `origin/big-changes`, so nothing is unbacked.
 
 ## OQ003 — Launch email delivery and redirect configuration
 
@@ -41,12 +44,6 @@
 - The preview retains live history until account deletion, anonymises audit identifiers and preserves other patients' consultation text after a doctor deletes their account. Names inside free-text clinical records are not automatically redacted. An approved production retention/redaction policy is still required.
 - Approve correction/nomination/grievance workflows, international patient eligibility and telemedicine requirements, clinician verification, paid-consultation pricing/refunds and final jurisdiction language before public clinical use. No operating entity, cross-border licence, partnership or paid service is inferred by this build.
 
-## OQ008 — Production wearable-provider access
-
-- Register production OAuth clients for Google Health and WHOOP, approve their consent screens, and add the exact local and production callback URLs before enabling their Connect buttons. No provider accounts, terms or credentials were created by this build.
-- Garmin live linking requires acceptance into the Garmin Connect Developer Program and a commercial licence decision. Ultrahuman multi-user access requires partner approval. Owners, fees, allowed data, deletion/revocation duties and launch availability remain unresolved.
-- A live Apple Watch background connection requires a native iOS HealthKit bridge and App Store privacy review. The launch web architecture intentionally supports Apple Health export instead.
-
 ## OQ009 — Native build, signing and physical-device acceptance
 
 - The shared bearer-authenticated server contract, source registration, immutable batch receipts, latency report and platform implementation checklists are in the repository.
@@ -61,3 +58,9 @@
 ## OQ011 — Vercel preview environment parity
 
 - The Vercel project is accessible, but its public Supabase URL/publishable key are currently listed for Production and Development rather than Preview. Add deliberate Preview values and a Preview `NEXT_PUBLIC_APP_URL` strategy before treating a preview deployment as a functioning staging environment. Do not silently reuse production health data for a staging pilot.
+
+## OQ012 — Production wearable-provider access
+
+- Register production OAuth clients for Google Health and WHOOP, approve their consent screens, and add the exact local and production callback URLs before enabling their Connect buttons. No provider accounts, terms or credentials were created by this build.
+- Garmin live linking requires acceptance into the Garmin Connect Developer Program and a commercial licence decision. Ultrahuman multi-user access requires partner approval. Owners, fees, allowed data, deletion/revocation duties and launch availability remain unresolved.
+- A live Apple Watch background connection requires a native iOS HealthKit bridge and App Store privacy review. The launch web architecture intentionally supports Apple Health export instead.

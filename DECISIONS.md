@@ -158,6 +158,8 @@ The public comparison reads `device_catalog` through the existing publishable-ke
 
 Vercel CLI 59.11.7 `whoami` reports logged out. Follow PLAN's build-only fallback; do not log in, create a temporary deployment/account or upload environment secrets. Verify the production build locally with the browser suites. A real Vercel deployment, final Auth redirect allowlist, environment configuration and minute scheduler activation remain founder setup, not a completed public deployment.
 
+**Superseded post-M8 for current status only.** The repository is now linked to a Vercel project (`.vercel/repo.json`, project `hms`, remote `origin`), and FINAL_REPORT.md records that the linked project and a production site exist. The logged-out build-only fallback above describes M7's evidence, not the present environment. Preview-environment parity remains unresolved (OQ011), the minute scheduler is still unactivated (OQ004), and no session has deployed, logged in or uploaded secrets on the founder's behalf.
+
 ## D018 — Uncertain clinical writes and bounded cursor validation
 
 Reuse a component-lifetime request/message UUID when retrying unchanged content after an uncertain response. The existing database operations already check the UUID and matching payload. Clear a message draft as soon as its write is confirmed, independently of the subsequent view refresh. Keep drafts and retry IDs in memory only; after reloading, check saved consults/messages before composing another request. Changed content is a new operation, not a silent overwrite of an already saved clinical entry.
@@ -181,7 +183,11 @@ Apple HealthKit is an on-device iOS/watchOS API, not browser OAuth, so Apple Wat
 ## D022 — Local test login remains a real session
 
 Show “Continue as test user” only under `next dev` and accept its POST only when `NODE_ENV` is development, the request URL is loopback and Origin exactly matches. The route uses the server-only Supabase secret to generate a magic link for one reserved test identity, then redeems its token hash through the existing SSR client so normal signed cookies, profile ownership and RLS remain in force. It sends no email and completes only that synthetic profile's onboarding fields. Production hides the control and returns 404 from the endpoint; this is test convenience, not an alternative production authentication method.
-# D024 — Live device ingestion and notification latency
+## D023 — Number not used
+
+No decision was recorded under this number. The gap is kept deliberately so existing references to D024–D027 in PROGRESS.md, FINAL_REPORT.md and README.md stay valid.
+
+## D024 — Live device ingestion and notification latency
 
 HMS reacts immediately after data arrives, but does not claim to control a wearable's sensor or cloud-upload cadence. Fresh authenticated ingestion and direct account sync use a bounded inline fast path to recompute the latest affected day, evaluate alerts and drain the durable notification outbox; the every-minute pg_cron/Vercel route remains the retry and polling fallback. Connected browsers receive PHI-free private Supabase Broadcast invalidations and re-read the authorised, audited patient view. Web Push payloads also contain no health measurements and only deep-link back to HMS.
 
