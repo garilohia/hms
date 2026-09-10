@@ -10,6 +10,8 @@ A personal health history and doctor-sharing application. The existing Next.js A
 4. Run the quality gate with `npm run lint && npm run typecheck && npm test`.
 5. Start with `npm run dev` and open [localhost:3000](http://localhost:3000).
 
+During `npm run dev`, the sign-in page includes **Continue as test user**. It creates or reuses the reserved local test account through Supabase and opens Today without sending email. The button and endpoint are unavailable in a production build.
+
 ## Verification
 
 `npm run build` verifies production compilation. For browser tests, run `npx playwright install chromium`, then `npm run build && npm run e2e`. Playwright starts the production server on port 3100. Unit tests do not read developer credentials.

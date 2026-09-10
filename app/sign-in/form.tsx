@@ -1,6 +1,6 @@
 "use client";
 import { useState, type FormEvent } from "react";
-export function SignInForm() {
+export function SignInForm({showTestLogin=false}:{showTestLogin?:boolean}) {
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
@@ -16,6 +16,15 @@ export function SignInForm() {
     } catch { setMessage("Check your connection and try again."); }
     finally { setBusy(false); }
   }
+  async function testLogin() {
+    setBusy(true);setMessage("");
+    try {
+      const response=await fetch("/api/auth/test-login",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});
+      const result:{next?:string;error?:string}=await response.json();
+      if(!response.ok||!result.next)throw new Error(result.error||"Test login failed.");
+      window.location.assign(result.next);
+    } catch(error) { setMessage(error instanceof Error?error.message:"Test login failed.");setBusy(false); }
+  }
   return <form onSubmit={submit} className="space-y-5">
     <label className="block">Account
       <select aria-label="Account" value={mode} onChange={e => setMode(e.target.value as "signin" | "signup")} className="mt-2 w-full rounded-lg border p-3">
@@ -29,6 +38,7 @@ export function SignInForm() {
       <p className="text-sm text-zinc-600">Under 18? Your guardian creates a dependent profile from their account.</p>
     </>}
     <button disabled={busy} className="w-full rounded-lg bg-teal-800 p-3 font-medium text-white disabled:opacity-60">{busy ? "Sending…" : "Email me a sign-in link"}</button>
+    {showTestLogin&&<div className="space-y-3 border-t border-zinc-200 pt-5"><button type="button" disabled={busy} onClick={()=>void testLogin()} className="w-full rounded-lg border border-teal-800 bg-white p-3 font-medium text-teal-900 disabled:opacity-60">{busy?"Opening test account…":"Continue as test user"}</button><p className="text-sm text-zinc-600">Local development only. Creates a real Supabase session without sending email.</p></div>}
     <p role="status" aria-live="polite">{message}</p>
   </form>;
 }

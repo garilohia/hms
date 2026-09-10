@@ -6,6 +6,6 @@ export default async function SignInPage({ searchParams }: { searchParams: Promi
     <h1 className="text-3xl font-semibold">Your health history, together.</h1>
     {params.deleted === "1" && <p role="status">Your account and owned health data have been deleted from the live service.</p>}
     {params.error && <p role="alert">That link could not be used. Request a new sign-in link.</p>}
-    <SignInForm />
+    <SignInForm showTestLogin={process.env.NODE_ENV === "development"} />
   </main>;
 }
