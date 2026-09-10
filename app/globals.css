@@ -301,11 +301,13 @@ progress { accent-color: var(--accent); }
 .data-chart .chart-bar { fill: var(--data); opacity: .85; }
 .data-chart .chart-bar.latest { opacity: 1; }
 .data-chart .chart-notch { stroke: var(--urgent); stroke-width: 2; cursor: pointer; }
-.data-chart .chart-phase { fill: var(--ink-soft); }
+.data-chart .chart-phase { fill: var(--ink-soft); opacity: .55; }
+.data-chart .chart-phase-stroke, .phase-swatch .chart-phase-stroke { stroke: var(--ink-soft); stroke-width: 1; opacity: .55; }
+.phase-swatch .chart-phase { fill: var(--ink-soft); opacity: .55; }
 .chart-axis { display: flex; justify-content: space-between; gap: 12px; color: var(--ink-soft); font-size: var(--text-axis); margin-top: 6px; }
 .chart-building { display: flex; justify-content: space-between; align-items: center; gap: 12px; color: var(--ink-soft); font-size: var(--text-axis); margin-top: 8px; }
 .chart-building b { font-weight: 500; color: var(--ink); }
-.chart-draw { stroke-dasharray: 2000; stroke-dashoffset: 2000; animation: chart-draw 400ms ease-out forwards; }
+.chart-draw { stroke-dasharray: 1; stroke-dashoffset: 1; animation: chart-draw 400ms ease-out forwards; }
 @keyframes chart-draw { to { stroke-dashoffset: 0; } }
 .phase-swatch { display: inline-block; width: 14px; height: 10px; border: 1px solid var(--rule); vertical-align: middle; margin-right: 6px; }
 

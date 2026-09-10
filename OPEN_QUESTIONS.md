@@ -64,3 +64,15 @@
 - Register production OAuth clients for Google Health and WHOOP, approve their consent screens, and add the exact local and production callback URLs before enabling their Connect buttons. No provider accounts, terms or credentials were created by this build.
 - Garmin live linking requires acceptance into the Garmin Connect Developer Program and a commercial licence decision. Ultrahuman multi-user access requires partner approval. Owners, fees, allowed data, deletion/revocation duties and launch availability remain unresolved.
 - A live Apple Watch background connection requires a native iOS HealthKit bridge and App Store privacy review. The launch web architecture intentionally supports Apple Health export instead.
+
+## OQ013 — Cycle-phase shading is not covered by DESIGN.md
+
+- DESIGN.md §5.1 makes the 28-day band "the only fill in the product" and §12 forbids any colour outside §4.2. PLAN.md §6 golden path 1 and PROGRESS.md require visible cycle-phase shading on the Temp chart, and the History screen previously used four pastel fills for it.
+- Applied as written: the four phases now render as hairline hatch patterns in `--ink-soft` (dense diagonal, dots, horizontal, cross-hatch) behind the plot, with a matching swatch and the phase word in the legend. No new colour and no solid fill; the `cycle-phase` test hook is unchanged.
+- Founder decision needed: confirm hatching is acceptable, or add a sanctioned phase treatment to DESIGN.md. Do not reintroduce pastel fills.
+
+## OQ014 — DESIGN.md and the reference HTML disagree on one value, and the three densities do not exist in code
+
+- `hms-lock-candidate.html` sets dark `--urgent` to `#F0554F`; DESIGN.md §4.2 says `#F4655E`. DESIGN.md is the locked source, so `#F4655E` ships and `scripts/check-contrast.ts` verifies it (5.47:1 on surface). Update the reference file or the spec so they match.
+- DESIGN.md §9 describes Simple, Standard and Advanced densities chosen at onboarding and stored per profile. The codebase has no mode setting, no More → Display screen and no per-profile density field. This pass was scoped as visual-only with no data-model or behaviour changes, so the shared system is applied at the Standard density everywhere. Adding the two other densities is a product and schema decision for the founder.
+- Body text is 17px everywhere; the 19px Simple body and 12px Advanced card padding are therefore not applied.

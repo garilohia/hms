@@ -218,3 +218,11 @@ Do not claim a native app is shipped merely because its server protocol exists. 
 Expose an audited, full-history-scoped report that aggregates the last 30 days of `recorded_at → received_at`, alert creation and completed delivery timing. Show median and 95th percentile separately by source and metric. Mark continuous sources delayed after three configured source intervals with a minimum five-minute grace period; manual imports never pretend to be live.
 
 A delayed or absent feed is an operational state, not evidence that the person slept, did not sleep, fainted or is otherwise unwell. HMS may notify about feed health only with copy that says data stopped arriving. Clinical and monitor-authored thresholds continue to evaluate actual received measurements. This avoids converting permission, battery or connectivity failures into false medical claims.
+
+## D028 — Chart band, boundary split and marker semantics under the locked design system
+
+The History chart's "usual range" band is the rolling 28-day median ± 3 MAD of the metric's daily values, recomputed per visible day from every daily row the page has loaded (shorter ranges keep earlier rows as baseline source rather than pretending the baseline is empty). Three MADs is roughly two standard deviations, so a line leaving the band is "unusual for you" while alert rules still fire at four MADs. The band appears only once seven daily values exist in the window and is drawn as a dashed `--rule` outline with the "Building your baseline" count until 28 exist, in line with DESIGN.md §5.4. Bars start at zero; lines do not.
+
+The polyline is split at the exact crossing of the band edge (linear interpolation of both the value and the moving edge), never recoloured whole. Alert markers are 2px `--urgent` notches on the axis for every severity, as §5.5 requires; the acknowledged state is carried in the marker's accessible name and title rather than by a second colour. Chart geometry lives in `src/lib/patient/chart.ts` as pure functions; the shared `DataChart` component measures its container and rebuilds the geometry at the rendered width so axis text stays at the axis size on every viewport.
+
+No existing test assertion changed for this pass; new unit tests cover the band threshold, the boundary split, the text alternative and bar rendering.
