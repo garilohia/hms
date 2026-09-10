@@ -15,4 +15,13 @@ test("ingestion rejects unauthenticated and cross-origin writes", async ({ reque
     const unsigned = await request.post(path, { headers: { Origin: baseURL! }, data: {} });
     expect(unsigned.status()).toBe(401);
   }
+  const connect = await request.get("/api/integrations/google_health/connect?profile=00000000-0000-4000-8000-000000000000", { maxRedirects: 0 });
+  expect(connect.status()).toBe(302);
+  expect(connect.headers().location).toContain("/sign-in");
+  const crossOriginDisconnect = await request.delete("/api/integrations/whoop", { headers: { Origin: "https://untrusted.invalid" }, data: {} });
+  expect(crossOriginDisconnect.status()).toBe(403);
+  const unsignedDisconnect = await request.delete("/api/integrations/whoop", { headers: { Origin: baseURL! }, data: {} });
+  expect(unsignedDisconnect.status()).toBe(401);
+  const unsignedSync = await request.post("/api/integrations/google_health/sync", { headers: { Origin: baseURL! }, data: {} });
+  expect(unsignedSync.status()).toBe(401);
 });

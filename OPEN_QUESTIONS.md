@@ -40,3 +40,9 @@
 - Counsel must reconcile the founder-requested live hard-delete behaviour with applicable medical-record retention and DPDP Rules 2025 rule 8(3)/security-log obligations, taking phased commencement and any subsequent notifications/corrigenda into account. Review provider backup/log retention and processors' locations. Do not promise all infrastructure processing stays in India or immediate backup erasure.
 - The preview retains live history until account deletion, anonymises audit identifiers and preserves other patients' consultation text after a doctor deletes their account. Names inside free-text clinical records are not automatically redacted. An approved production retention/redaction policy is still required.
 - Approve correction/nomination/grievance workflows, international patient eligibility and telemedicine requirements, clinician verification, paid-consultation pricing/refunds and final jurisdiction language before public clinical use. No operating entity, cross-border licence, partnership or paid service is inferred by this build.
+
+## OQ008 — Production wearable-provider access
+
+- Register production OAuth clients for Google Health and WHOOP, approve their consent screens, and add the exact local and production callback URLs before enabling their Connect buttons. No provider accounts, terms or credentials were created by this build.
+- Garmin live linking requires acceptance into the Garmin Connect Developer Program and a commercial licence decision. Ultrahuman multi-user access requires partner approval. Owners, fees, allowed data, deletion/revocation duties and launch availability remain unresolved.
+- A live Apple Watch background connection requires a native iOS HealthKit bridge and App Store privacy review. The launch web architecture intentionally supports Apple Health export instead.

@@ -2,7 +2,7 @@ import { z } from "zod";
 
 export const metricTypes = ["heart_rate", "resting_heart_rate", "hrv_rmssd", "spo2", "skin_temperature", "respiratory_rate", "steps", "active_calories", "total_calories", "sleep_stage", "sleep_duration", "stress_score", "weight_kg", "body_fat_pct", "blood_pressure_systolic", "blood_pressure_diastolic", "blood_glucose", "vo2max", "menstrual_flow", "basal_body_temperature"] as const;
 export type MetricType = typeof metricTypes[number];
-export const providers = ["simulator", "apple_health_export", "fitbit_export", "garmin_export", "generic_csv", "fitbit_api", "aggregator"] as const;
+export const providers = ["simulator", "apple_health_export", "fitbit_export", "garmin_export", "generic_csv", "fitbit_api", "google_health_api", "whoop_api", "aggregator"] as const;
 export type Provider = typeof providers[number];
 export const units: Record<MetricType, string> = {
   heart_rate: "bpm", resting_heart_rate: "bpm", hrv_rmssd: "ms", spo2: "%", skin_temperature: "°C",

@@ -66,6 +66,9 @@ input[type=date], input[type=file] { min-width: 0; width: 100%; }
 .list-row { padding: 18px 0; border-bottom: 1px solid #dbe4ed; display: flex; gap: 12px; justify-content: space-between; align-items: center; }
 .list-row:first-child { padding-top: 0; }
 .list-row:last-child { border: 0; padding-bottom: 0; }
+.connection-grid { display: grid; gap: 12px; }
+.connection-card { border: 1px solid #dbe4ed; border-radius: 14px; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.connection-card .button, .connection-card .badge { align-self: flex-start; }
 .form-field { display: flex; flex-direction: column; gap: 6px; }
 .check-field { display: flex; align-items: flex-start; gap: 12px; }
 .check-field input { margin-top: 4px; }
@@ -76,4 +79,4 @@ input[type=date], input[type=file] { min-width: 0; width: 100%; }
 .message-row { border-bottom: 1px solid #dbe4ed; padding-bottom: 14px; }
 .card h2, .card h3 { font-weight: 600; }
 .onboarding { width: 100%; max-width: 560px; margin: 0 auto; padding: 32px 20px; }
-@media (min-width: 700px) { .app-frame { padding-top: 12px; } .card { padding: 28px; } }
+@media (min-width: 700px) { .app-frame { padding-top: 12px; } .card { padding: 28px; } .connection-grid { grid-template-columns: repeat(2,minmax(0,1fr)); } }

@@ -29,5 +29,5 @@ export async function patientPage(section:ViewSection,requested?:string) {
     view.contains_sample=viewSchema.parse(latest.data).contains_sample;
   }
   // Capture one request-time local date and serialise it with the private view.
-  return {view,profiles,today:localDay(Date.now(),view.profile.timezone)};
+  return {view,profiles,session,today:localDay(Date.now(),view.profile.timezone)};
 }
