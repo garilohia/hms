@@ -14,8 +14,9 @@ describe("alert defaults and exact copy", () => {
   it("has every specified system threshold", () => {
     expect(defaultRules.map(r => [r.metric_type, r.comparator, r.value, r.min_duration_s, r.severity])).toEqual([
       ["spo2", "lt", 90, 600, "urgent"], ["spo2", "lt", 92, 1800, "attention"], ["resting_heart_rate", "gt", 4, 1800, "attention"],
-      ["heart_rate", "gt", 150, 300, "urgent"], ["heart_rate", "lt", 40, 300, "urgent"], ["skin_temperature", "gt", 1, 7200, "attention"],
+      ["heart_rate", "gt", 150, 300, "urgent"], ["heart_rate", "lt", 40, 300, "urgent"], ["skin_temperature", "gt", 4, 1800, "attention"],
       ["blood_pressure_systolic", "gte", 180, 0, "urgent"], ["blood_pressure_diastolic", "gte", 120, 0, "urgent"],
+      ["skin_temperature", "lt", 4, 1800, "attention"],
     ]);
     expect(alertCopy("SpO2", "88 %", "10:00", "112")).toBe("Unusual reading: SpO2 was 88 % at 10:00. That's outside your normal range. If you feel unwell, call 112 or contact your doctor.");
   });
@@ -24,7 +25,7 @@ describe("alert defaults and exact copy", () => {
     const days = [...new Set(metrics.map(m => m.recorded_at.slice(0, 10)))];
     const summaries = days.map(day => dailySummary(metrics, { day }));
     const events = evaluateAlerts(metrics, baselinesFor(summaries, "2026-05-31"), defaultRules, options);
-    expect(events.map(e => e.rule.rule_key)).toEqual(expect.arrayContaining(["spo2-urgent", "spo2-attention", "rhr-high", "temp-shift"]));
+    expect(events.map(e => e.rule.rule_key)).toEqual(expect.arrayContaining(["spo2-urgent", "spo2-attention", "rhr-high", "skin-temp-high"]));
     expect(events.every(e => e.isSample)).toBe(true);
   });
   it("ignores unknown/exercising heart-rate context, uses explicit rest", () => {
@@ -33,12 +34,16 @@ describe("alert defaults and exact copy", () => {
     expect(evaluateAlerts([metric("heart_rate", 160, 300, true)], {}, defaultRules, options)[0].rule.rule_key).toBe("hr-high");
     expect(evaluateAlerts([metric("heart_rate", 39, 300, true)], {}, defaultRules, options)[0].rule.rule_key).toBe("hr-low");
   });
-  it("requires sufficient baseline history and Celsius deviation, not MAD, for temperature", () => {
-    const metrics = [metric("skin_temperature", 34.5, 7200)];
+  it("requires sufficient baseline history and sustained symmetric skin-temperature deviation", () => {
+    const metrics = [metric("skin_temperature", 34.5, 1800)];
     expect(evaluateAlerts(metrics, {}, defaultRules, options)).toEqual([]);
     const events = evaluateAlerts(metrics, { skin_temperature: { median: 33.4, mad: .1, n: 28 } }, defaultRules, options);
     expect(events[0].peak).toBe(34.5); expect(events[0].deviation_mads).toBeCloseTo(11);
-    expect(evaluateAlerts([metric("skin_temperature", 34.4, 7200)], { skin_temperature: { median: 33.4, mad: .1, n: 28 } }, defaultRules, options)).toEqual([]);
+    expect(evaluateAlerts([metric("skin_temperature", 33.1, 1800)], { skin_temperature: { median: 33.4, mad: .1, n: 28 } }, defaultRules, options)).toEqual([]);
+    expect(evaluateAlerts([metric("skin_temperature", 32.9, 1800)], { skin_temperature: { median: 33.4, mad: .1, n: 28 } }, defaultRules, options)[0].rule.rule_key).toBe("skin-temp-low");
+  });
+  it("does not apply clinical thermometer cutoffs to wearable skin temperature", () => {
+    expect(evaluateAlerts([metric("skin_temperature", 38, null)], {}, defaultRules, options)).toEqual([]);
   });
   it("requires explicit user-entered BP and accepts either threshold", () => {
     expect(evaluateAlerts([metric("blood_pressure_systolic", 180, null)], {}, defaultRules, options)).toEqual([]);

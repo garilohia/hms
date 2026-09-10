@@ -4,7 +4,7 @@ import { addDays, localDay } from "../analytics/time";
 import { normalisedMetric, type NormalisedMetric } from "../ingestion/model";
 import type { IntegrationProvider, StoredTokens } from "./model";
 import { refreshAccessToken } from "./providers";
-import { loadIntegration, persistIntegrationMetrics, updateIntegrationTokens } from "./store";
+import { loadIntegration, markIntegrationSynced, persistIntegrationMetrics, updateIntegrationTokens } from "./store";
 import { normaliseGoogle } from "./normalise";
 
 function metric(input: Omit<NormalisedMetric,"duration_s"|"quality"|"external_id"> & Partial<Pick<NormalisedMetric,"duration_s"|"quality"|"external_id">>) {
@@ -28,8 +28,9 @@ async function googlePoints(accessToken:string,type:string,start:string) {
   return points;
 }
 
-async function syncGoogle(tokens:StoredTokens,timezone:string,scopes:string[]){
-  const start=new Date(Date.now()-7*86400000).toISOString();const types:string[]=[];
+function incrementalStart(lastSyncAt:string|null){const fallback=Date.now()-7*86400000,parsed=lastSyncAt?Date.parse(lastSyncAt):NaN;return new Date(Number.isFinite(parsed)?Math.max(fallback,parsed-5*60000):fallback).toISOString();}
+async function syncGoogle(tokens:StoredTokens,timezone:string,scopes:string[],lastSyncAt:string|null){
+  const start=incrementalStart(lastSyncAt);const types:string[]=[];
   if(scopes.some(scope=>scope.endsWith("activity_and_fitness.readonly")))types.push("steps","active-energy-burned");
   if(scopes.some(scope=>scope.endsWith("health_metrics_and_measurements.readonly")))types.push("daily-resting-heart-rate","daily-heart-rate-variability","daily-oxygen-saturation","daily-respiratory-rate","daily-sleep-temperature-derivations","daily-vo2-max","weight");
   if(scopes.some(scope=>scope.endsWith("sleep.readonly")))types.push("sleep");
@@ -47,8 +48,8 @@ async function whoopCollection(tokens:StoredTokens,path:string,start:string){
   }
   return records;
 }
-async function syncWhoop(tokens:StoredTokens,scopes:string[]):Promise<NormalisedMetric[]>{
-  const start=new Date(Date.now()-7*86400000).toISOString();const [recoveries,cycles,sleeps]=await Promise.all([
+async function syncWhoop(tokens:StoredTokens,scopes:string[],lastSyncAt:string|null):Promise<NormalisedMetric[]>{
+  const start=incrementalStart(lastSyncAt);const [recoveries,cycles,sleeps]=await Promise.all([
     scopes.includes("read:recovery")?whoopCollection(tokens,"recovery",start):[],
     scopes.includes("read:cycles")?whoopCollection(tokens,"cycle",start):[],
     scopes.includes("read:sleep")?whoopCollection(tokens,"activity/sleep",start):[],
@@ -62,6 +63,7 @@ async function syncWhoop(tokens:StoredTokens,scopes:string[]):Promise<Normalised
 export async function syncIntegration(actor:string,subject:string,provider:IntegrationProvider){
   const connection=await loadIntegration(actor,subject,provider);let tokens=connection.tokens;
   if(!validTokens(tokens)){tokens=await refreshAccessToken(provider,tokens);await updateIntegrationTokens(actor,subject,provider,tokens);}
-  const metrics=provider==="google_health"?await syncGoogle(tokens,connection.timezone,connection.scopes):await syncWhoop(tokens,connection.scopes);
-  if(!metrics.length)return{inserted:0,skipped:0};return persistIntegrationMetrics(actor,subject,connection.sourceId,metrics);
+  const metrics=provider==="google_health"?await syncGoogle(tokens,connection.timezone,connection.scopes,connection.lastSyncAt):await syncWhoop(tokens,connection.scopes,connection.lastSyncAt);
+  const result=metrics.length?await persistIntegrationMetrics(actor,subject,connection.sourceId,metrics):{inserted:0,skipped:0};
+  await markIntegrationSynced(actor,subject,provider);return result;
 }

@@ -17,7 +17,8 @@ async function main() {
           category=excluded.category,price_inr=excluded.price_inr,price_usd=excluded.price_usd,price_gbp=excluded.price_gbp,price_aed=excluded.price_aed,
           metrics_supported=excluded.metrics_supported,battery_days=excluded.battery_days,has_ecg=excluded.has_ecg,has_skin_temp=excluded.has_skin_temp,
           has_spo2=excluded.has_spo2,has_hrv=excluded.has_hrv,has_screen=excluded.has_screen,subscription_required=excluded.subscription_required,
-          subscription_cost=excluded.subscription_cost,source_urls=excluded.source_urls,last_verified_at=excluded.last_verified_at,editorial_note=excluded.editorial_note`;
+          subscription_cost=excluded.subscription_cost,update_class=excluded.update_class,connection_path=excluded.connection_path,
+          latency_label=excluded.latency_label,realtime_capable=excluded.realtime_capable,source_urls=excluded.source_urls,last_verified_at=excluded.last_verified_at,editorial_note=excluded.editorial_note`;
       }
       await tx.unsafe("SET LOCAL ROLE anon");
       for (const expected of rows) {

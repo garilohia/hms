@@ -10,8 +10,9 @@ export function liveFixtures(baseURL:string) {
   return {db,admin,subjects,errors,
     async actor(page:Page,name:string,dob="1990-01-01") {
       page.on("pageerror",e=>errors.push(e.message));const email="hms-family-"+randomUUID()+"@example.com";
-      const link=await admin.auth.admin.generateLink({type:"magiclink",email,options:{data:{name,dob}}});
-      if(link.error)throw new Error("Synthetic sign-in failed: "+link.error.code);actors.push(link.data.user.id);
+      let link=await admin.auth.admin.generateLink({type:"magiclink",email,options:{data:{name,dob}}});
+      for(let attempt=1;link.error&&attempt<3;attempt++){await new Promise(resolve=>setTimeout(resolve,attempt*1000));link=await admin.auth.admin.generateLink({type:"magiclink",email,options:{data:{name,dob}}});}
+      if(link.error)throw new Error("Synthetic sign-in failed: "+(link.error.code||link.error.message));actors.push(link.data.user.id);
       const [p]=await db.unsafe("select id from public.profiles where auth_user_id=$1",[link.data.user.id]);subjects.push(p.id);
       await db.unsafe("update public.profiles set onboarding_completed_at=now(),sex_at_birth='prefer_not_to_say' where id=$1",[p.id]);
       await page.goto(baseURL+"/auth/confirm?next=/account&token_hash="+encodeURIComponent(link.data.properties.hashed_token));await expect(page.getByRole("heading",{name:"Your account"})).toBeVisible();

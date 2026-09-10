@@ -19,8 +19,8 @@ test("sample alerts, protected cron, acknowledgement, settings and Chrome notifi
     await expect(page.getByRole("heading", { name: "Alert rules and notifications" })).toBeVisible();
     await expect(page.getByText("Browser notification worker registered.", { exact: true })).toBeVisible();
     await context.grantPermissions(["notifications"]);
-    await page.getByRole("button", { name: "Test browser notification" }).click();
-    await expect(page.getByText("Local test notification shown. Server push is not enabled.", { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Test notification", exact: true }).click();
+    await expect(page.getByText("Local test notification shown.", { exact: true })).toBeVisible();
     expect(await page.evaluate(async () => (await (await navigator.serviceWorker.ready).getNotifications({ tag: "hms-test" })).length)).toBe(1);
     await page.getByLabel("Email me unusual-reading notices.").check();
     await expect(page.getByText("Consent updated.", { exact: true })).toBeVisible();
@@ -29,8 +29,11 @@ test("sample alerts, protected cron, acknowledgement, settings and Chrome notifi
     const source = await page.request.post("/api/ingestion/sources", { headers, data: { userId: subject, provider: "simulator", key: "Sample data · Alert verification" } });
     expect(source.ok()).toBe(true); const sourceData = await source.json();
     const now = Date.now();
-    const metrics = Array.from({ length: 35 }, (_, minute) => ({ metric_type: "spo2", value: minute < 12 ? 88 : 91, unit: "%", recorded_at: new Date(now - 3600000 + minute * 60000).toISOString(), duration_s: 60, quality: "raw", external_id: null }));
-    expect((await page.request.post("/api/ingestion/batches", { headers, data: { userId: subject, sourceId: sourceData.id, metrics } })).ok()).toBe(true);
+    // Keep the final reading fresh so the owner-scoped fast path verifies these
+    // alerts without waiting behind unrelated historical summary jobs.
+    const metrics = Array.from({ length: 35 }, (_, minute) => ({ metric_type: "spo2", value: minute < 12 ? 88 : 91, unit: "%", recorded_at: new Date(now - 35 * 60000 + minute * 60000).toISOString(), duration_s: 60, quality: "raw", external_id: null }));
+    const batch = await page.request.post("/api/ingestion/batches", { headers, data: { userId: subject, sourceId: sourceData.id, metrics } });
+    expect(batch.ok(), await batch.text()).toBe(true);
     expect((await page.request.post("/api/jobs/tick")).status()).toBe(401);
     expect((await page.request.post("/api/jobs/tick", { headers: { Authorization: "Bearer incorrect" } })).status()).toBe(401);
     const tick = await page.request.post("/api/jobs/tick", { headers: { Authorization: "Bearer " + cronSecret }, timeout: 110000 });
@@ -45,12 +48,15 @@ test("sample alerts, protected cron, acknowledgement, settings and Chrome notifi
     await expect(page.getByText("Sample data", { exact: true })).toHaveCount(2);
     await expect(page.getByText("attention", { exact: true })).toBeVisible();
     for (let i = 0; i < 6; i++) {
-      const deliveries = await db.unsafe("select status from public.alert_deliveries where user_id=$1", [subject]);
-      if (deliveries.length === 2 && deliveries.every(d => d.status === "stubbed")) break;
+      const deliveries = await db.unsafe("select channel,status from public.alert_deliveries where user_id=$1", [subject]);
+      if (deliveries.filter(d => d.channel === "email").length === 2 && deliveries.filter(d => d.channel === "email").every(d => d.status === "stubbed")) break;
       expect((await page.request.post("/api/jobs/tick", { headers: { Authorization: "Bearer " + cronSecret }, timeout: 110000 })).status()).toBe(200);
     }
-    const delivered = await db.unsafe("select status from public.alert_deliveries where user_id=$1", [subject]);
-    expect(delivered.map(d => d.status)).toEqual(["stubbed", "stubbed"]);
+    const delivered = await db.unsafe("select channel,status from public.alert_deliveries where user_id=$1 order by channel,status", [subject]);
+    expect(delivered).toEqual([
+      { channel: "email", status: "stubbed" }, { channel: "email", status: "stubbed" },
+      { channel: "push", status: "cancelled" }, { channel: "push", status: "cancelled" },
+    ]);
     const urgent = page.locator("article").filter({ has: page.getByText("urgent", { exact: true }) });
     await urgent.getByRole("button", { name: "Acknowledge" }).click();
     await expect(page.getByText("1 acknowledged alerts retained in history.", { exact: true })).toBeVisible();

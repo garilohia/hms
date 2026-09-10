@@ -1,8 +1,10 @@
 "use client";
 import { useEffect,useState } from "react";
 import { patientPost,readView,type PatientView } from "@/src/lib/patient/model";
+import { useRealtimePatientView } from "@/src/lib/patient/realtime";
 export function Today({initial}:{initial:PatientView}) {
-  const [view,setView]=useState(initial),[message,setMessage]=useState(""),[busy,setBusy]=useState(false);
+  const {view,setView,live}=useRealtimePatientView(initial,"today");
+  const [message,setMessage]=useState(""),[busy,setBusy]=useState(false);
   const userId=initial.profile.id;
   useEffect(()=>{
     if(!initial.pending_jobs || !initial.ingestion_consent || !initial.can_manage) return;
@@ -21,7 +23,7 @@ export function Today({initial}:{initial:PatientView}) {
     }
     void compute();
     return ()=>controller.abort();
-  },[initial,userId]);
+  },[initial,userId,setView]);
   const summary=view.summaries?.[0],alert=view.alerts?.[0];
   async function acknowledge() {
     if(!alert) return;
@@ -30,6 +32,7 @@ export function Today({initial}:{initial:PatientView}) {
     catch(error){setMessage(error instanceof Error?error.message:"Please try again.");} finally{setBusy(false);}
   }
   return <div className="stack">
+    <p className="muted" role="status"><span className={live==="live"?"live-dot":"live-dot offline"} aria-hidden="true" /> {live==="live"?"Live updates connected":live==="connecting"?"Connecting live updates…":"Live connection interrupted; retrying automatically"}</p>
     <section className={"card hero stack "+(alert?.severity||"")} data-testid="today-hero">
       {(view.contains_sample || alert?.is_sample) && <span className="badge">Sample data</span>}
       {view.consent_given_by_guardian && <p className="muted">Consent given by guardian</p>}

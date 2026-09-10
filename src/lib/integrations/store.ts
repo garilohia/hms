@@ -55,9 +55,9 @@ export async function loadIntegration(actor: string, subject: string, provider: 
     return await db.begin(async tx => {
       await bindActor(tx, actor);
       await lockOwnedSubject(tx, subject, true);
-      const [row] = await tx.unsafe("select c.source_id,c.encrypted_tokens,c.granted_scopes,p.timezone from hms_private.integration_connections c join public.profiles p on p.id=c.user_id where c.user_id=$1 and c.provider=$2 for update", [subject, provider]);
+      const [row] = await tx.unsafe("select c.source_id,c.encrypted_tokens,c.granted_scopes,p.timezone,s.last_sync_at::text from hms_private.integration_connections c join public.profiles p on p.id=c.user_id join public.data_sources s on s.id=c.source_id where c.user_id=$1 and c.provider=$2 for update of c", [subject, provider]);
       if (!row) throw new Error("Connect this wearable first.");
-      return { sourceId: String(row.source_id), timezone: String(row.timezone), scopes: Array.isArray(row.granted_scopes) ? row.granted_scopes.map(String) : [], tokens: unseal<StoredTokens>(String(row.encrypted_tokens)) };
+      return { sourceId: String(row.source_id), timezone: String(row.timezone), lastSyncAt: row.last_sync_at ? String(row.last_sync_at) : null, scopes: Array.isArray(row.granted_scopes) ? row.granted_scopes.map(String) : [], tokens: unseal<StoredTokens>(String(row.encrypted_tokens)) };
     });
   } finally { await db.end(); }
 }
@@ -71,6 +71,12 @@ export async function updateIntegrationTokens(actor: string, subject: string, pr
       await tx.unsafe("update hms_private.integration_connections set encrypted_tokens=$1,token_expires_at=$2,updated_at=now() where user_id=$3 and provider=$4", [seal(tokens), tokens.expiresAt || null, subject, provider]);
     });
   } finally { await db.end(); }
+}
+
+export async function markIntegrationSynced(actor:string,subject:string,provider:IntegrationProvider) {
+  const db=rightsDatabase();
+  try { await db.begin(async tx=>{await bindActor(tx,actor);await lockOwnedSubject(tx,subject,true);await tx.unsafe("update hms_private.integration_connections c set next_sync_at=now()+interval '1 minute',sync_locked_until=null,last_error=null,updated_at=now() where c.user_id=$1 and c.provider=$2 returning source_id",[subject,provider]).then(async rows=>{if(rows[0])await tx.unsafe("update public.data_sources set last_sync_at=now() where id=$1 and user_id=$2",[rows[0].source_id,subject]);});}); }
+  finally {await db.end();}
 }
 
 export async function persistIntegrationMetrics(actor: string, subject: string, sourceId: string, metrics: NormalisedMetric[]) {

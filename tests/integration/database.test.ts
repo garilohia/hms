@@ -67,9 +67,9 @@ describe("real Postgres: migrations, authentication guard, RLS and audited acces
     if (cx) { await q("ROLLBACK"); cx.release(); }
     await db.end();
   });
-  it("migrates all 23 required/supporting tables from scratch with RLS", async () => {
+  it("migrates all 24 required/supporting tables from scratch with RLS", async () => {
     const tables=await q("select relname,relrowsecurity from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname=$1 and c.relkind='r'",[schema]);
-    expect(tables).toHaveLength(23);
+    expect(tables).toHaveLength(24);
     expect(tables.every(t => t.relrowsecurity)).toBe(true);
   });
   it("permits A to see their metric but B cannot read A's data", async () => {
@@ -710,6 +710,75 @@ describe("real Postgres: migrations, authentication guard, RLS and audited acces
     await q("update " + t("caregiver_links") + " set status='revoked',revoked_at=now() where patient_id=$1 and caregiver_id=$2", [subjects.alice, actors.bob]);
     expect(await store.prepare(job, now)).toBeNull();
     expect(await q("select * from " + t("audit_log") + " where action='system_notification_read' and metadata->>'recipient_actor'=$1", [actors.bob])).toHaveLength(1);
+  });
+  it("lets an alert-scoped caregiver configure a patient threshold and revokes that authority immediately", async () => {
+    await owner();
+    await q("insert into " + t("caregiver_links") + "(patient_id,caregiver_id,role,status,granted_scopes,invited_by) values($1,$2,'caregiver','active',array['summary_only','alerts']::" + t("sharing_scope") + "[],'patient')", [subjects.alice, actors.bob]);
+    await actAs(actors.bob);
+    const payload = JSON.stringify({ metricType: "spo2", comparator: "lt", thresholdType: "absolute", value: 90, duration: 60, severity: "urgent", enabled: true });
+    const [saved] = await q("select " + fn("monitor_rules") + "($1,'upsert',$2::text::jsonb) as v", [subjects.alice, payload]);
+    expect(saved.v.ok).toBe(true);
+    const [read] = await q("select " + fn("monitor_rules") + "($1,'read') as v", [subjects.alice]);
+    expect(read.v.rules).toHaveLength(1);
+    expect(read.v.rules[0]).toMatchObject({ author_account_id: actors.bob, author_role: "caregiver", metric_type: "spo2", value: 90, can_edit: true });
+    await actAs(actors.alice);
+    await q("select " + fn("record_consent") + "($1,'data_ingestion',true,'test',$2)", [subjects.alice, hash]);
+    const sourceId = await connect();
+    const now = new Date(Date.now() + 1000);
+    await ingest(subjects.alice, sourceId, [{ metric_type: "spo2", value: 89, unit: "%", recorded_at: new Date(now.getTime() - 11 * 60000).toISOString(), duration_s: 60, quality: "raw", external_id: null }]);
+    await owner();
+    expect((await runSummaryJobs(summaryStore(), { limit: 3, clock: () => now })).failed).toBe(0);
+    const [alert] = await q("select id from " + t("alerts") + " where monitoring_rule_id=$1", [saved.v.id]);
+    expect(alert).toBeTruthy();
+    const deliveries = await q("select recipient_kind,recipient_key,channel from " + t("alert_deliveries") + " where alert_id=$1 order by recipient_kind,channel", [alert.id]);
+    expect(deliveries).toEqual(expect.arrayContaining([
+      { recipient_kind: "owner", recipient_key: actors.alice, channel: "email" },
+      { recipient_kind: "owner", recipient_key: actors.alice, channel: "push" },
+      { recipient_kind: "monitor", recipient_key: actors.bob, channel: "email" },
+      { recipient_kind: "monitor", recipient_key: actors.bob, channel: "push" },
+    ]));
+    await actAs(actors.bob);
+    const [deliveryStatus] = await q("select " + fn("monitor_delivery_status") + "($1) as v", [subjects.alice]);
+    expect(deliveryStatus.v.channels).toEqual([
+      { recipient: "Profile owner", is_current: false, email_enabled: false, push_enabled: false },
+      { recipient: "You", is_current: true, email_enabled: false, push_enabled: false },
+    ]);
+    expect(deliveryStatus.v.activity[0]).toMatchObject({ id: alert.id, acknowledged_at: null });
+    expect(deliveryStatus.v.activity[0].deliveries).toEqual(expect.arrayContaining([
+      { recipient: "Profile owner", channel: "email", status: "pending", delivered_at: null },
+      { recipient: "You", channel: "push", status: "pending", delivered_at: null },
+    ]));
+    await owner();
+    await q("update " + t("caregiver_links") + " set status='revoked',revoked_at=now() where patient_id=$1 and caregiver_id=$2", [subjects.alice, actors.bob]);
+    expect((await q("select enabled from " + t("monitoring_rules") + " where id=$1", [saved.v.id]))[0].enabled).toBe(false);
+    expect((await q("select status from " + t("alert_deliveries") + " where alert_id=$1", [alert.id])).every(row => row.status === "cancelled")).toBe(true);
+    await actAs(actors.bob);
+    await expect(q("select " + fn("monitor_rules") + "($1,'read')", [subjects.alice])).rejects.toMatchObject({ code: "42501" });
+  });
+  it("requires alert scope for a verified doctor to configure monitoring", async () => {
+    await actAs(actors.doctor);
+    const payload = JSON.stringify({ metricType: "spo2", comparator: "lt", thresholdType: "absolute", value: 90, duration: 60, severity: "urgent", enabled: true });
+    await q("SAVEPOINT doctor_monitor_attempt");
+    await expect(q("select " + fn("monitor_rules") + "($1,'upsert',$2::text::jsonb)", [subjects.alice, payload])).rejects.toMatchObject({ code: "42501" });
+    await q("ROLLBACK TO SAVEPOINT doctor_monitor_attempt");
+    await owner();
+    await q("update " + t("doctor_patient_links") + " set granted_scopes=array['summary_only','alerts']::" + t("sharing_scope") + "[] where patient_id=$1 and doctor_id=$2", [subjects.alice, subjects.doctor]);
+    await actAs(actors.doctor);
+    const [saved] = await q("select " + fn("monitor_rules") + "($1,'upsert',$2::text::jsonb) as v", [subjects.alice, payload]);
+    expect(saved.v.ok).toBe(true);
+  });
+  it("lets adult profile owners and guardians manage monitoring rules, with database-enforced metric bounds", async () => {
+    const valid = JSON.stringify({ metricType: "spo2", comparator: "lt", thresholdType: "absolute", value: 90, duration: 60, severity: "urgent", enabled: true });
+    await actAs(actors.alice);
+    expect((await q("select " + fn("monitor_rules") + "($1,'upsert',$2::text::jsonb) as v", [subjects.alice, valid]))[0].v.ok).toBe(true);
+    await q("SAVEPOINT invalid_monitor_value");
+    await expect(q("select " + fn("monitor_rules") + "($1,'upsert',$2::text::jsonb)", [subjects.alice, JSON.stringify({ ...JSON.parse(valid), value: 101 })])).rejects.toMatchObject({ code: "23514" });
+    await q("ROLLBACK TO SAVEPOINT invalid_monitor_value");
+    await actAs(actors.guardian);
+    const [child] = await q("select " + fn("create_dependent") + "('Sample monitored child','2015-01-01','test',$1) as id", [hash]);
+    expect((await q("select " + fn("monitor_rules") + "($1,'upsert',$2::text::jsonb) as v", [child.id, valid]))[0].v.ok).toBe(true);
+    const [read] = await q("select " + fn("monitor_rules") + "($1,'read') as v", [child.id]);
+    expect(read.v.rules[0]).toMatchObject({ author_role: "owner", can_edit: true });
   });
   it("allows owner threshold overrides and clears consent when the contact changes", async () => {
     await actAs(actors.alice);

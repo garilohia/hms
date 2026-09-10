@@ -50,6 +50,7 @@ export const summaryJobs = pgTable("summary_jobs", {
 export const metrics = pgTable("metrics", {
   id: id(), userId: patient(), sourceId: uuid("source_id").notNull(), metricType: metricType("metric_type").notNull(),
   value: numeric("value").notNull(), unit: text("unit").notNull(), recordedAt: at("recorded_at").notNull(),
+  receivedAt: at("received_at").defaultNow().notNull(),
   durationS: integer("duration_s"), atRest: boolean("at_rest"), quality: quality("quality").default("raw").notNull(), externalId: text("external_id"),
 }, t => [
   uniqueIndex("metrics_dedupe").on(t.userId, t.metricType, t.recordedAt, t.sourceId),
@@ -85,15 +86,38 @@ export const alertRules = pgTable("alert_rules", {
 }, t => [index("rules_user_idx").on(t.userId), uniqueIndex("rules_user_key").on(t.userId, t.ruleKey), uniqueIndex("rules_system_key").on(t.ruleKey).where(sql`${t.userId} IS NULL`), check("rule_threshold_type", sql`${t.thresholdType} IN ('absolute', 'baseline_deviation')`),
   check("rule_comparator", sql`${t.comparator} IN ('lt', 'lte', 'gt', 'gte')`), check("rule_duration", sql`${t.minDurationS} >= 0`)]).enableRLS();
 
+export const monitoringRules = pgTable("monitoring_rules", {
+  id: id(), patientId: patient(), authorAccountId: uuid("author_account_id").notNull(), authorRole: text("author_role").notNull(),
+  metricType: metricType("metric_type").notNull(), comparator: text("comparator").notNull(), thresholdType: text("threshold_type").default("absolute").notNull(),
+  value: numeric("value").notNull(), minDurationS: integer("min_duration_s").default(0).notNull(), severity: severity("severity").default("attention").notNull(),
+  enabled: boolean("enabled").default(true).notNull(), createdAt: created(), updatedAt: at("updated_at").defaultNow().notNull(),
+}, t => [index("monitoring_rules_patient_idx").on(t.patientId), index("monitoring_rules_author_idx").on(t.authorAccountId),
+  uniqueIndex("monitoring_rules_author_metric").on(t.patientId, t.authorAccountId, t.metricType, t.comparator),
+  check("monitoring_rule_author_role", sql`${t.authorRole} IN ('owner','caregiver','doctor')`),
+  check("monitoring_rule_comparator", sql`${t.comparator} IN ('lt','lte','gt','gte')`),
+  check("monitoring_rule_threshold_type", sql`${t.thresholdType} IN ('absolute','baseline_deviation')`),
+  check("monitoring_rule_bounds", sql`${t.value} BETWEEN 0 AND 10000 AND ${t.minDurationS} BETWEEN 0 AND 86400`),
+  check("monitoring_rule_metric_bounds", sql`(${t.thresholdType} = 'baseline_deviation' AND ${t.value} BETWEEN 0.1 AND 20) OR (${t.thresholdType} = 'absolute' AND CASE ${t.metricType}
+    WHEN 'spo2' THEN ${t.value} BETWEEN 50 AND 100 WHEN 'heart_rate' THEN ${t.value} BETWEEN 20 AND 300
+    WHEN 'resting_heart_rate' THEN ${t.value} BETWEEN 20 AND 220 WHEN 'hrv_rmssd' THEN ${t.value} BETWEEN 0 AND 1000
+    WHEN 'respiratory_rate' THEN ${t.value} BETWEEN 1 AND 100 WHEN 'steps' THEN ${t.value} BETWEEN 0 AND 200000
+    WHEN 'active_calories' THEN ${t.value} BETWEEN 0 AND 50000 WHEN 'total_calories' THEN ${t.value} BETWEEN 0 AND 50000
+    WHEN 'sleep_duration' THEN ${t.value} BETWEEN 0 AND 1440 WHEN 'stress_score' THEN ${t.value} BETWEEN 0 AND 100
+    WHEN 'weight_kg' THEN ${t.value} BETWEEN 0.5 AND 500 WHEN 'body_fat_pct' THEN ${t.value} BETWEEN 1 AND 75
+    WHEN 'blood_pressure_systolic' THEN ${t.value} BETWEEN 30 AND 300 WHEN 'blood_pressure_diastolic' THEN ${t.value} BETWEEN 20 AND 200
+    WHEN 'blood_glucose' THEN ${t.value} BETWEEN 20 AND 1000 WHEN 'vo2max' THEN ${t.value} BETWEEN 1 AND 100
+    WHEN 'basal_body_temperature' THEN ${t.value} BETWEEN 30 AND 45 ELSE false END)`)]).enableRLS();
+
 export const alerts = pgTable("alerts", {
   id: id(), userId: patient(), ruleId: uuid("rule_id").references(() => alertRules.id, { onDelete: "set null" }),
+  monitoringRuleId: uuid("monitoring_rule_id").references(() => monitoringRules.id, { onDelete: "set null" }),
   metricSnapshot: json("metric_snapshot").notNull(), severity: severity("severity").notNull(),
   firedAt: at("fired_at").defaultNow().notNull(), acknowledgedAt: at("acknowledged_at"),
   escalatedToContactAt: at("escalated_to_contact_at"), escalatedToDoctorAt: at("escalated_to_doctor_at"),
   eventStart: at("event_start"), eventEnd: at("event_end"), sourceId: uuid("source_id").references(() => dataSources.id, { onDelete: "cascade" }),
   escalationDueAt: at("escalation_due_at"), escalationProcessedAt: at("escalation_processed_at"),
   isSample: boolean("is_sample").default(false).notNull(), isHistorical: boolean("is_historical").default(false).notNull(),
-}, t => [index("alerts_user_time_idx").on(t.userId, t.firedAt), index("alerts_rule_idx").on(t.ruleId), index("alerts_source_idx").on(t.sourceId),
+}, t => [index("alerts_user_time_idx").on(t.userId, t.firedAt), index("alerts_rule_idx").on(t.ruleId), index("alerts_monitoring_rule_idx").on(t.monitoringRuleId), index("alerts_source_idx").on(t.sourceId),
   index("alerts_due_idx").on(t.escalationDueAt).where(sql`${t.escalationProcessedAt} IS NULL AND ${t.acknowledgedAt} IS NULL`)]).enableRLS();
 
 export const alertDeliveries = pgTable("alert_deliveries", {
@@ -105,7 +129,7 @@ export const alertDeliveries = pgTable("alert_deliveries", {
   payload: json("payload"), deliveredAt: at("delivered_at"), createdAt: created(),
 }, t => [uniqueIndex("delivery_alert_recipient").on(t.alertId, t.recipientKind, t.recipientKey, t.channel), index("delivery_subject_idx").on(t.userId),
   index("delivery_due_idx").on(t.availableAt).where(sql`${t.status} = 'pending'`),
-  check("delivery_kind", sql`${t.recipientKind} IN ('owner','caregiver','contact')`),
+  check("delivery_kind", sql`${t.recipientKind} IN ('owner','caregiver','monitor','contact')`),
   check("delivery_status", sql`${t.status} IN ('pending','sent','stubbed','cancelled','failed')`),
   check("delivery_channel", sql`${t.channel} IN ('email','push')`)]).enableRLS();
 
@@ -188,8 +212,10 @@ export const deviceCatalog = pgTable("device_catalog", {
   hasEcg: boolean("has_ecg").default(false).notNull(), hasSkinTemp: boolean("has_skin_temp").default(false).notNull(),
   hasSpo2: boolean("has_spo2").default(false).notNull(), hasHrv: boolean("has_hrv").default(false).notNull(), hasScreen: boolean("has_screen").default(false).notNull(),
   subscriptionRequired: boolean("subscription_required").default(false).notNull(), subscriptionCost: text("subscription_cost"),
+  updateClass: text("update_class").default("manual").notNull(), connectionPath: text("connection_path").default("Manual import").notNull(),
+  latencyLabel: text("latency_label").default("Only when the user imports data").notNull(), realtimeCapable: boolean("realtime_capable").default(false).notNull(),
   sourceUrls: text("source_urls").array().notNull(), lastVerifiedAt: at("last_verified_at"), editorialNote: text("editorial_note").notNull(),
-}, t => [uniqueIndex("device_brand_model").on(t.brand, t.model)]).enableRLS();
+}, t => [uniqueIndex("device_brand_model").on(t.brand, t.model), check("device_update_class", sql`${t.updateClass} IN ('live','near_realtime','delayed','manual','partner')`)]).enableRLS();
 
 export const auditLog = pgTable("audit_log", {
   id: id(), actorId: uuid("actor_id"), action: text("action").notNull(), targetUserId: uuid("target_user_id"),

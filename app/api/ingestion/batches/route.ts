@@ -1,6 +1,7 @@
 import { authenticatedClient, sameOrigin } from "@/src/lib/auth/server";
 import { boundedJson } from "@/src/lib/ingestion/http";
 import { batchInput } from "@/src/lib/ingestion/model";
+import { processFreshHealthData } from "@/src/lib/jobs/immediate";
 
 export async function POST(request: Request) {
   if (!sameOrigin(request)) return Response.json({ error: "Request origin rejected." }, { status: 403 });
@@ -17,5 +18,8 @@ export async function POST(request: Request) {
     const invalid = ["22023", "22P02", "22007", "22008", "23514", "23502"].includes(error.code);
     return Response.json({ error: error.code === "42501" ? "Access or ingestion consent was withdrawn. Import stopped." : invalid ? "Check this batch's units and timestamps. Readings and their measurement intervals must be complete, not in the future. Correct the device clock or retry later." : "The data service is temporarily unavailable. Re-import to resume safely.", code: error.code }, { status: error.code === "42501" ? 403 : invalid ? 400 : 503 });
   }
-  return Response.json(data);
+  const fresh = metrics.some(metric => Date.now() - Date.parse(metric.recorded_at) >= 0 && Date.now() - Date.parse(metric.recorded_at) <= 5 * 60_000);
+  if (!fresh || !(data && typeof data === "object" && "inserted" in data && Number(data.inserted) > 0)) return Response.json(data);
+  try { return Response.json({ ...(data as object), pipeline: await processFreshHealthData(session.user.id, userId) }); }
+  catch { return Response.json({ ...(data as object), pipeline: { state: "queued" } }); }
 }

@@ -4,7 +4,8 @@ import { createSummaryStore } from "@/src/lib/jobs/summary-store";
 import { runSummaryJobs } from "@/src/lib/jobs/summary-runner";
 import { createDeliveryStore } from "@/src/lib/alerts/delivery-store";
 import { dispatchAlerts } from "@/src/lib/alerts/dispatch";
-import { emailTransport } from "@/src/lib/alerts/transport";
+import { emailTransport, pushTransport, routedTransport } from "@/src/lib/alerts/transport";
+import { syncDueIntegrations } from "@/src/lib/integrations/scheduled";
 export const runtime = "nodejs";
 export const maxDuration = 120;
 export async function POST(request: Request) {
@@ -14,9 +15,11 @@ export async function POST(request: Request) {
   const db = postgres(process.env.DATABASE_URL, { max: 2, prepare: false, connect_timeout: 5, connection: { statement_timeout: 10000 } });
   try {
     // Deadlines get priority over a large historical import backlog.
-    const alerts = await dispatchAlerts(createDeliveryStore(db), emailTransport(), { budgetMs: 15000, limit: 10 });
+    const urgent = await dispatchAlerts(createDeliveryStore(db), routedTransport(emailTransport(), pushTransport()), { budgetMs: 6000, limit: 5 });
+    const integrations = await syncDueIntegrations(db, { limit: 3 });
     const summaries = await runSummaryJobs(createSummaryStore(db), { limit: 3, timeBudgetMs: 20000 });
-    return Response.json({ alerts, summaries }, { headers, status: alerts.failed || summaries.failed ? 503 : 200 });
+    const alerts = await dispatchAlerts(createDeliveryStore(db), routedTransport(emailTransport(), pushTransport()), { budgetMs: 12000, limit: 20 });
+    return Response.json({ urgent, integrations, alerts, summaries }, { headers, status: urgent.failed || integrations.failed || alerts.failed || summaries.failed ? 503 : 200 });
   } catch { return Response.json({ error: "Job dispatch failed. Pending work is retained for retry." }, { status: 503, headers }); }
   finally { await db.end({ timeout: 5 }); }
 }

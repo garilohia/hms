@@ -1,0 +1,1 @@
+ALTER TABLE "metrics" ADD COLUMN "received_at" timestamp with time zone DEFAULT now() NOT NULL;

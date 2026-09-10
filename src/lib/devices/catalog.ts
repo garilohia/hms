@@ -4,9 +4,20 @@ import { deviceSchema, type Device } from "./model";
 // Null is unknown, never zero. False flags mean not positively verified for this row.
 const verified = "2026-09-08T00:00:00Z";
 function device(input: Pick<Device, "brand" | "model" | "category" | "source_urls" | "editorial_note" | "metrics_supported"> & Partial<Device>): Device {
+  const update = input.brand === "Google" || input.brand === "Fitbit" || input.brand === "WHOOP"
+    ? { update_class: "near_realtime" as const, connection_path: input.brand === "WHOOP" ? "WHOOP OAuth" : "Google Health OAuth", latency_label: "HMS checks every minute after the wearable app sends the reading to its cloud.", realtime_capable: false }
+    : input.brand === "Oura"
+      ? { update_class: "partner" as const, connection_path: "Oura OAuth + webhook (provider approval needed)", latency_label: "About 30 seconds after the Oura app syncs; app/device sync can add delay.", realtime_capable: false }
+      : input.brand === "Garmin"
+        ? { update_class: "partner" as const, connection_path: "Garmin Health API/SDK partnership", latency_label: "Cloud data arrives after Garmin Connect sync; a licensed native SDK is required for live streams.", realtime_capable: true }
+        : input.brand === "Withings"
+          ? { update_class: "partner" as const, connection_path: "Withings OAuth + webhook", latency_label: "After the measurement reaches Withings Cloud; no continuous stream from a scale.", realtime_capable: false }
+          : input.brand === "Abbott"
+            ? { update_class: "partner" as const, connection_path: "Abbott partner integration", latency_label: "Sensor readings can be minute-level, but HMS cannot receive them until partner access is approved.", realtime_capable: true }
+            : { update_class: "manual" as const, connection_path: "Apple/Google health export or HMS CSV", latency_label: "Only after the user exports and imports data; not automatic.", realtime_capable: false };
   return deviceSchema.parse({ price_inr: null, price_usd: null, price_gbp: null, price_aed: null, battery_days: null,
     has_ecg: false, has_skin_temp: false, has_spo2: false, has_hrv: false, has_screen: false,
-    subscription_required: false, subscription_cost: null, last_verified_at: verified, ...input });
+    subscription_required: false, subscription_cost: null, last_verified_at: verified, ...update, ...input });
 }
 const appleSources = ["https://www.apple.com/watch/compare/", "https://www.apple.com/us/shop/goto/buy_watch", "https://www.apple.com/in/shop/buy-watch", "https://www.apple.com/uk/shop/buy-watch", "https://www.apple.com/ae/shop/buy-watch"];
 const googleVitals = "https://support.google.com/googlehealth/answer/14236917?hl=en";
@@ -73,6 +84,21 @@ export const catalog: Device[] = [
   device({ brand: "Withings", model: "Body Smart", category: "scale", price_usd: 129.95, has_screen: true,
     metrics_supported: ["weight_kg", "body_fat_pct", "heart_rate"], source_urls: ["https://www.withings.com/en-us/products/body-smart-black"],
     editorial_note: "Wi-Fi scale for weight and body-composition estimates; replaceable batteries average 15 months. Withings+ is optional." }),
+  device({ brand: "Withings", model: "Body Comp", category: "scale", price_usd: 229.95, has_screen: true,
+    metrics_supported: ["weight_kg", "body_fat_pct", "heart_rate"], source_urls: ["https://www.withings.com/en-us/products/body-comp-black"],
+    editorial_note: "Mid-premium Wi-Fi scale with body-composition estimates, standing heart rate and up to 15 months of battery life. Withings+ is optional." }),
+  device({ brand: "Withings", model: "Body Scan", category: "scale", price_usd: 499.95, battery_days: 365, has_screen: true, has_ecg: true,
+    metrics_supported: ["weight_kg", "body_fat_pct", "heart_rate"], source_urls: ["https://wcs.withings.com/us/en/body-scan"],
+    editorial_note: "Hyper-premium segmental body-composition scale with a handle and region-dependent 6-lead ECG; rechargeable battery lasts up to one year." }),
+  device({ brand: "Garmin", model: "Index S2", category: "scale", price_usd: 149.99, has_screen: true,
+    metrics_supported: ["weight_kg", "body_fat_pct"], source_urls: ["https://www.garmin.com/en-US/p/679362/", "https://www.garmin.com/en-US/newsroom/press-release/sports-fitness/2020-measure-more-with-the-index-s2-smart-scale-from-garmin/"],
+    editorial_note: "Wi-Fi scale that syncs measurements to Garmin Connect without the phone nearby; up to 16 users and roughly nine months of battery life." }),
+  device({ brand: "Fitbit", model: "Aria Air", category: "scale", has_screen: true,
+    metrics_supported: ["weight_kg"], source_urls: ["https://www.fitbit.com/content/assets/help/manuals/manual_aria_air_en_US.pdf"],
+    editorial_note: "Basic Bluetooth weight scale. The Fitbit app must be open nearby for a reading to sync, so it is not an unattended remote-monitoring option." }),
+  device({ brand: "eufy", model: "Smart Scale P2 Pro", category: "scale", price_gbp: 54.99,
+    metrics_supported: ["weight_kg", "body_fat_pct", "heart_rate"], source_urls: ["https://www.eufy.com/uk/products/t9149111"],
+    editorial_note: "Lower-cost Wi-Fi/Bluetooth body-composition scale with weight, heart-rate and body-fat estimates. HMS currently needs a health-platform export." }),
   device({ brand: "Omron", model: "Evolv BP7000", category: "bp_cuff", has_screen: true,
     metrics_supported: ["blood_pressure_systolic", "blood_pressure_diastolic", "heart_rate"], source_urls: ["https://omronhealthcare.com/products/evolv-wireless-upper-arm-blood-pressure-monitor-bp7000", "https://omronhealthcare.com/storage/pdfs/evolv-wireless-upper-arm-blood-pressure-monitor-bp7000-im-en03022020.pdf"],
     editorial_note: "Upper-arm cuff with Bluetooth; four AAA batteries rated for about 300 measurements, not a fixed number of days. Check cuff fit." }),

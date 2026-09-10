@@ -1,14 +1,16 @@
 import { randomUUID } from "node:crypto";
 import type postgres from "postgres";
 import { z } from "zod";
-import type { EmailPayload } from "./transport";
+import type { EmailPayload, NotificationPayload, PushPayload } from "./transport";
 type Executor = Pick<postgres.Sql, "unsafe">;
 type Transaction = <T>(work: (tx: Executor) => Promise<T>) => Promise<T>;
-export type DeliveryJob = { id: string; userId: string; token: string; attempts: number };
+export type DeliveryJob = { id: string; userId: string; token: string; attempts: number; channel?: "email" | "push" };
 export interface DeliveryStore {
   escalate(now: Date): Promise<number>;
   claim(now: Date): Promise<DeliveryJob | null>;
-  prepare(job: DeliveryJob, now: Date): Promise<EmailPayload | null>;
+  prepare(job: DeliveryJob & { channel?: "email" }, now: Date): Promise<({ channel: "email" } & EmailPayload) | null>;
+  prepare(job: DeliveryJob & { channel: "push" }, now: Date): Promise<({ channel: "push" } & PushPayload) | null>;
+  prepare(job: DeliveryJob, now: Date): Promise<NotificationPayload | null>;
   finish(job: DeliveryJob, now: Date, status: "sent" | "stubbed"): Promise<void>;
   retry(job: DeliveryJob, now: Date, error: string): Promise<void>;
 }
@@ -43,21 +45,25 @@ export class PostgresDeliveryStore implements DeliveryStore {
   async claim(now: Date): Promise<DeliveryJob | null> {
     const t = this.t;
     return this.transaction(async tx => {
-      const [row] = await tx.unsafe("select id,user_id,attempts from " + t("alert_deliveries") + " where status='pending' and channel='email' and available_at<=$1 and (locked_until is null or locked_until<=$1) order by available_at,id limit 1 for update skip locked", [now]);
+      const [row] = await tx.unsafe("select id,user_id,attempts,channel from " + t("alert_deliveries") + " where status='pending' and channel in ('email','push') and available_at<=$1 and (locked_until is null or locked_until<=$1) order by available_at,id limit 1 for update skip locked", [now]);
       if (!row) return null;
       const token = randomUUID();
       await tx.unsafe("update " + t("alert_deliveries") + " set lease_token=$2,locked_until=$3,attempts=attempts+1,first_attempt_at=coalesce(first_attempt_at,$4) where id=$1", [row.id, token, new Date(now.getTime() + 120000), now]);
-      return { id: row.id, userId: row.user_id, token, attempts: row.attempts + 1 };
+      return { id: row.id, userId: row.user_id, token, attempts: row.attempts + 1, channel: row.channel };
     });
   }
-  async prepare(job: DeliveryJob, now: Date): Promise<EmailPayload | null> {
+  async prepare(job: DeliveryJob & { channel?: "email" }, now: Date): Promise<({ channel: "email" } & EmailPayload) | null>;
+  async prepare(job: DeliveryJob & { channel: "push" }, now: Date): Promise<({ channel: "push" } & PushPayload) | null>;
+  async prepare(job: DeliveryJob, now: Date): Promise<NotificationPayload | null>;
+  async prepare(job: DeliveryJob, now: Date): Promise<NotificationPayload | null> {
     const t = this.t;
     return this.transaction(async tx => {
+      const channel = job.channel ?? "email";
       const [profile] = await tx.unsafe("select id,owner_account_id,emergency_contact from " + t("profiles") + " where id=$1 for update", [job.userId]);
       if (!profile) return null;
       const [delivery] = await tx.unsafe("select * from " + t("alert_deliveries") + " where id=$1 and lease_token=$2 and status='pending' for update", [job.id, job.token]);
       if (!delivery) return null;
-      const [alert] = await tx.unsafe("select a.*,coalesce((select r.enabled from " + t("alert_rules") + " r where r.rule_key=a.metric_snapshot->>'rule_key' and (r.user_id=a.user_id or r.user_id is null) order by r.user_id nulls last limit 1),false) as enabled from " + t("alerts") + " a where a.id=$1", [delivery.alert_id]);
+      const [alert] = await tx.unsafe("select a.*,(select r.author_account_id from " + t("monitoring_rules") + " r where r.id=a.monitoring_rule_id) monitor_author,case when a.monitoring_rule_id is not null then exists(select 1 from " + t("monitoring_rules") + " r join " + t("profiles") + " subject on subject.id=r.user_id where r.id=a.monitoring_rule_id and r.user_id=a.user_id and r.enabled and ((r.author_role='owner' and r.author_account_id=subject.owner_account_id) or (exists(select 1 from " + t("consents") + " c where c.user_id=a.user_id and c.consent_type::text='doctor_sharing' and c.revoked_at is null) and ((r.author_role='caregiver' and exists(select 1 from " + t("caregiver_links") + " l where l.patient_id=a.user_id and l.caregiver_id=r.author_account_id and l.role='caregiver' and l.status='active' and l.revoked_at is null and 'alerts'=any(l.granted_scopes))) or (r.author_role='doctor' and exists(select 1 from " + t("doctor_patient_links") + " l join " + t("doctors") + " d on d.id=l.doctor_id join " + t("profiles") + " p on p.id=d.id where l.patient_id=a.user_id and p.auth_user_id=r.author_account_id and p.role='doctor' and d.verified_at is not null and l.status='active' and l.revoked_at is null and 'alerts'=any(l.granted_scopes))))))) else coalesce((select r.enabled from " + t("alert_rules") + " r where r.rule_key=a.metric_snapshot->>'rule_key' and (r.user_id=a.user_id or r.user_id is null) order by r.user_id nulls last limit 1),false) end as enabled from " + t("alerts") + " a where a.id=$1", [delivery.alert_id]);
       const consents = await tx.unsafe("select consent_type::text as type from " + t("consents") + " where user_id=$1 and revoked_at is null", [job.userId]);
       const has = (name: string) => consents.some(c => c.type === name);
       let to: string | undefined, permitted = Boolean(alert && !alert.acknowledged_at && !alert.is_historical && alert.enabled && has("data_ingestion"));
@@ -67,21 +73,30 @@ export class PostgresDeliveryStore implements DeliveryStore {
       } else {
         const [actor] = await tx.unsafe("select email from auth.users where id=$1 and deleted_at is null and (banned_until is null or banned_until<=$2) and email_confirmed_at is not null", [delivery.recipient_key, now]);
         to = actor?.email;
-        if (delivery.recipient_kind === "owner") permitted &&= profile.owner_account_id === delivery.recipient_key && has("alert_email");
-        else {
-          const access = await tx.unsafe("select 1 from " + t("caregiver_links") + " l where l.patient_id=$1 and l.caregiver_id=$2 and l.role='caregiver' and l.status='active' and l.revoked_at is null and 'alerts'=any(l.granted_scopes) and exists(select 1 from " + t("profiles") + " p join " + t("consents") + " c on c.user_id=p.id where p.auth_user_id=$2 and c.consent_type::text='alert_email' and c.revoked_at is null)", [job.userId, delivery.recipient_key]);
+        if (delivery.recipient_kind === "owner") permitted &&= profile.owner_account_id === delivery.recipient_key && (channel === "push" || has("alert_email"));
+        else if (delivery.recipient_kind === "monitor") {
+          const authorConsent = channel === "push" ? [{ ok: 1 }] : await tx.unsafe("select 1 from " + t("profiles") + " p join " + t("consents") + " c on c.user_id=p.id where p.auth_user_id=$1 and c.consent_type::text='alert_email' and c.revoked_at is null", [delivery.recipient_key]);
+          permitted &&= alert.monitor_author === delivery.recipient_key && authorConsent.length > 0;
+        } else {
+          const access = await tx.unsafe("select 1 from " + t("caregiver_links") + " l where l.patient_id=$1 and l.caregiver_id=$2 and l.role in ('caregiver','guardian') and l.status='active' and l.revoked_at is null and 'alerts'=any(l.granted_scopes) and ($3='push' or exists(select 1 from " + t("profiles") + " p join " + t("consents") + " c on c.user_id=p.id where p.auth_user_id=$2 and c.consent_type::text='alert_email' and c.revoked_at is null))", [job.userId, delivery.recipient_key, channel]);
           permitted &&= has("doctor_sharing") && access.length > 0;
         }
       }
       const parsedEmail = z.email().safeParse(to);
       const expired = now.getTime() - new Date(delivery.first_attempt_at).getTime() >= 23 * 3600000;
-      if (!permitted || !parsedEmail.success || expired) {
+      const accountId = delivery.recipient_kind === "contact" ? null : delivery.recipient_key;
+      const subscriptions = channel === "push" && accountId ? await tx.unsafe("select endpoint,p256dh,auth from hms_private.push_subscriptions where account_id=$1 order by id", [accountId]) : [];
+      if (!permitted || (channel === "email" ? !parsedEmail.success : !subscriptions.length || delivery.recipient_kind === "contact") || expired) {
         await tx.unsafe("update " + t("alert_deliveries") + " set status=$3,lease_token=null,locked_until=null,last_error=$4 where id=$1 and lease_token=$2", [job.id, job.token, expired ? "failed" : "cancelled", expired ? "IdempotencyWindowExpired" : null]);
         return null;
       }
       // Freeze provider payload before the first call; retries use exactly the same body.
-      const payload = delivery.payload ? z.object({ to: z.email(), body: z.string(), sample: z.boolean() }).parse(delivery.payload) : { to: parsedEmail.data, body: String(alert.metric_snapshot.body), sample: Boolean(alert.is_sample) };
-      if (payload.to !== parsedEmail.data) {
+      const frozenEmail = delivery.payload && channel === "email" ? z.object({ channel: z.literal("email").optional(), to: z.email(), body: z.string(), sample: z.boolean() }).safeParse(delivery.payload) : null;
+      const payload: NotificationPayload = channel === "email"
+        ? frozenEmail?.success ? { channel: "email", to: frozenEmail.data.to, body: frozenEmail.data.body, sample: frozenEmail.data.sample }
+          : { channel: "email", to: parsedEmail.data!, body: String(alert.metric_snapshot.body), sample: Boolean(alert.is_sample) }
+        : { channel: "push", subscriptions: subscriptions.map(row => ({ endpoint: String(row.endpoint), keys: { p256dh: String(row.p256dh), auth: String(row.auth) } })), url: `/today?profile=${job.userId}`, sample: Boolean(alert.is_sample) };
+      if (channel === "email" && payload.to !== parsedEmail.data) {
         await tx.unsafe("update " + t("alert_deliveries") + " set status='cancelled',lease_token=null,locked_until=null where id=$1 and lease_token=$2", [job.id, job.token]);
         return null;
       }
