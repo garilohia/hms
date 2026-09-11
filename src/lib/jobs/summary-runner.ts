@@ -1,4 +1,4 @@
-export type SummaryJob = { id: string; userId: string; day: string; token: string; attempts: number };
+export type SummaryJob = { id: string; userId: string; day: string; token: string; attempts: number; rebucket?: boolean };
 export interface SummaryJobStore {
   claim(now: Date): Promise<SummaryJob | null>;
   process(job: SummaryJob, now: Date): Promise<number | "stale" | "withheld">;

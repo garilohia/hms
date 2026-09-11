@@ -32,11 +32,11 @@ export class PostgresSummaryStore implements SummaryJobStore {
   async claim(now: Date): Promise<SummaryJob | null> {
     const t = this.table;
     return this.transaction(async tx => {
-      const [job] = await tx.unsafe("select j.id,j.user_id,j.day::text,j.attempts from " + t("summary_jobs") + " j join " + t("profiles") + " p on p.id=j.user_id where j.revision>j.processed_revision and j.available_at<=$1 and (j.locked_until is null or j.locked_until<=$1) and exists (select 1 from " + t("consents") + " c where c.user_id=j.user_id and c.consent_type='data_ingestion' and c.revoked_at is null)" + (this.ownerScope ? " and j.user_id=$2 and p.owner_account_id=$3" : "") + " order by j.day,j.id limit 1 for update of j skip locked", this.ownerScope ? [now, this.ownerScope.subject, this.ownerScope.actor] : [now]);
+      const [job] = await tx.unsafe("select j.id,j.user_id,j.day::text,j.attempts,j.rebucket from " + t("summary_jobs") + " j join " + t("profiles") + " p on p.id=j.user_id where j.revision>j.processed_revision and j.available_at<=$1 and (j.locked_until is null or j.locked_until<=$1) and exists (select 1 from " + t("consents") + " c where c.user_id=j.user_id and c.consent_type='data_ingestion' and c.revoked_at is null)" + (this.ownerScope ? " and j.user_id=$2 and p.owner_account_id=$3" : "") + " order by j.day,j.id limit 1 for update of j skip locked", this.ownerScope ? [now, this.ownerScope.subject, this.ownerScope.actor] : [now]);
       if (!job) return null;
       const token = randomUUID();
       await tx.unsafe("update " + t("summary_jobs") + " set lease_token=$1,locked_until=$2,attempts=attempts+1 where id=$3", [token, new Date(now.getTime() + 120000), job.id]);
-      return { id: String(job.id), userId: String(job.user_id), day: String(job.day), attempts: Number(job.attempts) + 1, token };
+      return { id: String(job.id), userId: String(job.user_id), day: String(job.day), attempts: Number(job.attempts) + 1, token, rebucket: Boolean(job.rebucket) };
     });
   }
   async retry(job: SummaryJob, now: Date, error: string) {
@@ -69,8 +69,8 @@ export class PostgresSummaryStore implements SummaryJobStore {
       // Coalesce up to seven nearby pending days under the same profile lock.
       // This avoids repeating baseline/history round trips for every sample day.
       // An expensive/failed batch retries as one day; never span arbitrary years.
-      const extra = job.attempts > 1 ? [] : await tx.unsafe("select id,day::text,revision from " + t("summary_jobs") + " where user_id=$1 and id<>$2 and revision>processed_revision and available_at<=$3 and (locked_until is null or locked_until<=$3) and day>=$4 and day<=$5 order by day,id limit 6 for update skip locked", [job.userId, job.id, now, job.day, addDays(job.day, 6)]);
-      const work = [{ id: job.id, day: job.day, revision: Number(current.revision) }, ...extra.map(j => ({ id: String(j.id), day: String(j.day), revision: Number(j.revision) }))].sort((a, b) => a.day.localeCompare(b.day));
+      const extra = job.attempts > 1 ? [] : await tx.unsafe("select id,day::text,revision,rebucket from " + t("summary_jobs") + " where user_id=$1 and id<>$2 and revision>processed_revision and available_at<=$3 and (locked_until is null or locked_until<=$3) and day>=$4 and day<=$5 order by day,id limit 6 for update skip locked", [job.userId, job.id, now, job.day, addDays(job.day, 6)]);
+      const work = [{ id: job.id, day: job.day, revision: Number(current.revision), rebucket: Boolean(job.rebucket) }, ...extra.map(j => ({ id: String(j.id), day: String(j.day), revision: Number(j.revision), rebucket: Boolean(j.rebucket) }))].sort((a, b) => a.day.localeCompare(b.day));
       const timezone = String(profile.timezone), bounds = { start: dayBounds(work[0].day, timezone).start, end: dayBounds(work.at(-1)!.day, timezone).end };
       // Bounded calendar span plus intervals crossing its first midnight.
       const raw = await tx.unsafe("select m.metric_type,m.value::text,m.unit,m.recorded_at,m.duration_s,m.at_rest,m.quality,m.source_id,(s.provider='simulator') as is_sample from " + t("metrics") + " m join " + t("data_sources") + " s on s.id=m.source_id where m.user_id=$1 and m.recorded_at<$2 and m.recorded_at>=$3 and m.recorded_at+coalesce(m.duration_s,0)*interval '1 second'>=$4 order by m.recorded_at,m.id", [job.userId, new Date(bounds.end), new Date(bounds.start - 604800000), new Date(bounds.start - 86400000)]);
@@ -85,6 +85,16 @@ export class PostgresSummaryStore implements SummaryJobStore {
       const imported = periodsFromFlows(flow.map(r => ({ day: localDay(r.recorded_at instanceof Date ? r.recorded_at.getTime() : String(r.recorded_at), timezone), value: Number(r.value) })));
       const periods: PeriodLog[] = [...new Map([...imported, ...manual].map(p => [p.start, p])).values()];
       const derived = deriveHistory(summaries, periods);
+      // OQ005 re-bucketing re-evaluates the past under the new zone. persistAlerts only
+      // inserts and extends, so alerts the new day boundaries no longer produce are pruned
+      // first. Acknowledged or escalated alerts are kept: the patient already acted on them.
+      // The 24-hour floor matches persistAlerts' historical cut-off, so nothing with a
+      // pending delivery is ever removed and re-created.
+      const rebucketDays = work.filter(j => j.rebucket).map(j => j.day);
+      if (rebucketDays.length) {
+        const window = { start: dayBounds(rebucketDays[0], timezone).start, end: dayBounds(rebucketDays.at(-1)!, timezone).end };
+        await tx.unsafe("delete from " + t("alerts") + " where user_id=$1 and acknowledged_at is null and escalated_to_contact_at is null and escalated_to_doctor_at is null and escalation_processed_at is null and event_start<$2 and event_end>=$3 and event_end<$4", [job.userId, new Date(window.end), new Date(window.start), new Date(now.getTime() - 86400000)]);
+      }
       await persistAlerts(tx, t, { id: job.userId, timezone, local_emergency_number: String(profile.local_emergency_number), owner_account_id: String(profile.owner_account_id) }, work.map(j => j.day), metrics, summaries, now);
       const fields = [...numericFields, "contains_sample", "source_ids", "metric_values", "recovery_evidence"];
       const jsonFields = ["source_ids", "metric_values", "recovery_evidence"];
@@ -104,7 +114,7 @@ export class PostgresSummaryStore implements SummaryJobStore {
       await tx.unsafe("update " + t("insights") + " set resolved_at=$2 where user_id=$1 and insight_key like 'engine:%' and resolved_at is null and not (insight_key=any($3::text[]))", [job.userId, now, insights.map(i => i.key)]);
       if (insights.length) await tx.unsafe("insert into " + t("insights") + "(user_id,category,title,body,evidence,confidence,insight_key,created_at) select $1::uuid,j->>'category',j->>'title',j->>'body',j->'evidence',(j->>'confidence')::" + t("confidence") + ",j->>'key',$3::timestamptz from jsonb_array_elements($2::text::jsonb) j on conflict(user_id,insight_key) do update set body=excluded.body,evidence=excluded.evidence,confidence=excluded.confidence,resolved_at=null", [job.userId, JSON.stringify(insights), now]);
       await tx.unsafe("insert into " + t("audit_log") + "(action,target_user_id,target_table,target_id,metadata) select 'system_summary_read',$1::uuid,'analytics_inputs',(j->>'id')::uuid,jsonb_build_object('day',j->>'day','batch_metric_rows',$3::int) from jsonb_array_elements($2::text::jsonb) j", [job.userId, JSON.stringify(work), metrics.length]);
-      await tx.unsafe("update " + t("summary_jobs") + " j set processed_revision=w.revision,lease_token=null,locked_until=null,last_error=null,attempts=0 from jsonb_to_recordset($1::text::jsonb) as w(id uuid,revision integer) where j.id=w.id", [JSON.stringify(work)]);
+      await tx.unsafe("update " + t("summary_jobs") + " j set processed_revision=w.revision,lease_token=null,locked_until=null,last_error=null,attempts=0,rebucket=false from jsonb_to_recordset($1::text::jsonb) as w(id uuid,revision integer) where j.id=w.id", [JSON.stringify(work)]);
       return work.length;
     });
   }

@@ -5,6 +5,7 @@ import { addDays } from "@/src/lib/analytics/time";
 import { BAND_MADS,BASELINE_WINDOW_DAYS,buildSeries,chartMetrics,formatValue,summaryValues,type ChartMetric } from "@/src/lib/patient/chart";
 import { patientPost,readView,type PatientView,type Summary } from "@/src/lib/patient/model";
 import { DataChart,PhaseSwatch,cyclePhases } from "../ui/chart";
+import { RebucketNotice,StaleDay } from "../ui/rebucket";
 import {DocumentUpload} from "./document-upload";
 // The band needs the 28 days before the visible range, so every loaded row is kept as baseline source.
 function mergeRows(previous:Summary[],next:Summary[]) { const byDay=new Map(previous.map(r=>[r.day,r])); for(const row of next) byDay.set(row.day,row); return [...byDay.values()]; }
@@ -24,6 +25,7 @@ export function History({initial,today}:{initial:PatientView;today:string}) {
   const from=range==="All"?null:addDays(today,1-Number(range));
   const rows=(view.summaries??[]).filter(r=>!from||r.day>=from);
   const config=chartMetrics[metric];
+  const stale=new Set(view.stale_days??[]);
   const activeSource=selected?.source_ids[config.source];
   useEffect(()=>{
     const controller=new AbortController();
@@ -68,6 +70,7 @@ export function History({initial,today}:{initial:PatientView;today:string}) {
     {error&&<p role="alert">{error}</p>}
   </div>;
   return <div className="stack">
+    {view.rebucket&&<RebucketNotice state={view.rebucket}/>}
     <div aria-label="Metric" className="chips">{Object.keys(chartMetrics).map(key=><button key={key} aria-pressed={metric===key} onClick={()=>{setMetric(key as ChartMetric);setOverlays(o=>o.filter(v=>v!==key));setSelected(null);}}>{key}</button>)}</div>
     {mode==="advanced"&&<div aria-label="Overlay metrics" className="chips">{(Object.keys(chartMetrics) as ChartMetric[]).filter(key=>key!==metric).map(key=><button key={key} aria-pressed={overlays.includes(key)} disabled={!overlays.includes(key)&&overlays.length>=3} onClick={()=>setOverlays(o=>o.includes(key)?o.filter(v=>v!==key):[...o,key])}>{overlays.includes(key)?"Overlay "+(overlays.indexOf(key)+1)+": "+key:"+ "+key}</button>)}</div>}
     <div aria-label="History range" className="chips">{["7","30","90","365","All"].map(value=><button disabled={busy} key={value} aria-pressed={range===value} onClick={()=>void load(value)}>{value==="All"?"All":value+" days"}</button>)}</div>
@@ -86,10 +89,10 @@ export function History({initial,today}:{initial:PatientView;today:string}) {
           <details><summary>How the range is computed</summary><p className="muted mt-2">Median of the daily values in the {BASELINE_WINDOW_DAYS} days ending on the latest day, plus and minus {BAND_MADS} times the median absolute deviation. Missing days are skipped, never filled. Alert rules use the same median and deviation with their own multipliers.</p></details>
         </div>}
         {mode==="advanced"&&<div className="panel raw-table-wrap"><table className="raw-table"><caption className="type-label" style={{textAlign:"left",marginBottom:6}}>Daily values with source</caption><thead><tr><th>Day</th><th>{metric}</th>{overlays.map(key=><th key={key}>{key}</th>)}<th>Source</th></tr></thead>
-          <tbody>{[...rows].sort((a,b)=>b.day.localeCompare(a.day)).slice(0,showAllRows?365:30).map(r=><tr key={r.day}><td>{r.day}</td><td>{r[config.field]===null?"—":formatValue(r[config.field] as number)}</td>{overlays.map(key=><td key={key}>{r[chartMetrics[key].field]===null?"—":formatValue(r[chartMetrics[key].field] as number)}</td>)}<td>{r.source_ids[config.source]?sourceLabels[r.source_ids[config.source]]??"Loading…":"—"}</td></tr>)}</tbody></table>
+          <tbody>{[...rows].sort((a,b)=>b.day.localeCompare(a.day)).slice(0,showAllRows?365:30).map(r=><tr key={r.day}><td>{r.day} <StaleDay day={r.day} stale={stale}/></td><td>{r[config.field]===null?"—":formatValue(r[config.field] as number)}</td>{overlays.map(key=><td key={key}>{r[chartMetrics[key].field]===null?"—":formatValue(r[chartMetrics[key].field] as number)}</td>)}<td>{r.source_ids[config.source]?sourceLabels[r.source_ids[config.source]]??"Loading…":"—"}</td></tr>)}</tbody></table>
           {rows.length>30&&<button type="button" className="button secondary mt-3" onClick={()=>setShowAllRows(v=>!v)}>{showAllRows?"Show the latest 30 days":"Show all "+rows.length+" days"}</button>}</div>}
         <label className="form-field">Reading day<select value={selected?.day??""} onChange={e=>setSelected(rows.find(r=>r.day===e.target.value)??null)}><option value="">Choose a point or day</option>{rows.map(r=><option key={r.day} value={r.day}>{r.day}</option>)}</select></label>
-        {selected&&<div className="stack" data-testid="reading-detail"><p>{selected.day}: {selected[config.field]??"No reading"} {config.unit}{metric==="BP"?", diastolic "+(selected.bp_diastolic??"—")+" mmHg":""}</p>
+        {selected&&<div className="stack" data-testid="reading-detail"><p><StaleDay day={selected.day} stale={stale}/></p><p>{selected.day}: {selected[config.field]??"No reading"} {config.unit}{metric==="BP"?", diastolic "+(selected.bp_diastolic??"—")+" mmHg":""}</p>
           {selected.contains_sample&&<span className="badge">Sample data</span>}<p className="muted">Source device: {activeSource?(device?.id===activeSource?device.label:"Loading…"):"Not available"}</p>
           <p className="muted">One source per metric per day is selected. Real readings take priority, then coverage. A day split between devices may be undercounted.</p>
         </div>}

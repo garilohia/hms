@@ -43,7 +43,7 @@ export function Onboarding({initial,emailEnabled}:{initial:PatientProfile;emailE
           <p className="muted">Use a two-letter country code. For example, IN, US, GB or AE.</p>
           <label className="form-field">Home timezone<input name="timezone" required defaultValue={initial.timezone} list="timezones" maxLength={80} /></label>
           <datalist id="timezones">{["Asia/Kolkata","Asia/Dubai","Europe/London","America/New_York","America/Los_Angeles","Australia/Sydney"].map(t=><option key={t} value={t}/>)}</datalist>
-          <p className="muted">Your daily history uses this timezone. Choose it before importing; it cannot be changed after an import in this version.</p>
+          <p className="muted">Your daily history uses this timezone. You can change it later; your history is then recalculated day by day.</p>
           <label className="check-field"><input type="checkbox" checked={cycle} onChange={e=>setCycle(e.target.checked)}/><span>Show cycle estimates (optional). For planning training and energy. Not for fertility or contraception.</span></label>
           <DisplayModePicker value={mode} onChange={setMode}/>
           <p className="muted">Under 18? An adult guardian creates a dependent profile from their account.</p>

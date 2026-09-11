@@ -18,6 +18,8 @@ export function ClinicalSummary({initial,owner}:{initial:z.infer<typeof clinical
   }
   return <div className="stack"><section className="card stack"><h2>{body.profile.name}</h2><p>DOB {body.profile.dob}. {body.profile.sex_at_birth||"Sex not recorded"}</p>
     {body.contains_sample&&<p className="sample-badge">Sample data</p>}{body.consent_given_by_guardian&&<p className="sample-badge">Consent given by guardian</p>}
+    <p className="muted">Daily grouping uses {snapshot.timezone||body.profile.timezone}.</p>
+    {snapshot.timezone_changed&&<p className="sample-badge" data-testid="snapshot-timezone-changed">Timezone changed since this snapshot. The patient&apos;s history is now grouped by {body.profile.timezone}, so these days may differ.</p>}
     <p className="muted">{body.from} to {body.to}, {body.profile.timezone}</p><div className="chips">{([30,90] as const).map(days=><button key={days} className="chip" aria-pressed={body.days===days} disabled={busy} onClick={()=>refresh(days)}>{days} days</button>)}</div>
     {owner&&<button className="button secondary" disabled={busy} onClick={()=>refresh(body.days,true)}>Save current summary snapshot</button>}
     <a className="button" href={"/api/clinical-summary?profile="+body.profile.id+"&days="+body.days+(snapshot.id?"&snapshot="+snapshot.id:"")}>Download clinical PDF</a>

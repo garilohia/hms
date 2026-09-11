@@ -29,8 +29,9 @@
 
 ## OQ005 — History timezone changes after import
 
-- M5 allows choosing a home timezone before importing. Post-import changes are explicitly refused because silently regrouping daily history would invalidate summaries, period anchors and alert timing.
-- Supporting such changes needs a tested full re-bucketing workflow. Until then the UI explains the restriction; country of residence is separate from the history timezone.
+- Resolved 11 September 2026. The founder asked for the change to work, and it is built and verified (D032, migrations 0037-0039). Raw readings are absolute instants and never move; changing the home timezone re-enqueues every affected local day through the existing durable summary queue, drained by the owner-driven refresh batches that already serve import.
+- Past alerts are re-evaluated under the new zone, with a narrow prune of unacknowledged, non-escalated events older than 24 hours so nothing already acted on is rewritten and no notification is re-sent. History and Today stay readable and label each day still awaiting recalculation. Shared snapshots stay immutable and now carry the timezone they were computed in, with a flag on the doctor's copy when the patient has since moved.
+- Still open: country of residence remains separate from the history timezone. A very long history needs several visits to finish draining while the minute scheduler is undeployed (OQ004).
 
 ## OQ006 — Additional PDF scripts
 

@@ -371,6 +371,60 @@ describe("real Postgres: migrations, authentication guard, RLS and audited acces
     expect(p.onboarding_completed_at).toBeTruthy(); expect(p.cycle_tracking_enabled).toBe(true); expect(p.display_mode).toBe("advanced");
     const [log]=await q("select origin from "+t("cycle_logs")+" where user_id=$1",[subjects.alice]); expect(log.origin).toBe("manual");
   });
+  it("re-buckets history when the home timezone changes after an import (OQ005)",async()=>{
+    await actAs(actors.alice);
+    await q("select "+fn("profile_settings")+"($1,'identity',$2::text::jsonb)",[subjects.alice,JSON.stringify({name:"Alice",dob:"1990-01-01",sex:"female",country:"IN",timezone:"Asia/Kolkata"})]);
+    await owner(); await q("delete from "+t("summary_jobs")+" where user_id=$1",[subjects.alice]); await actAs(actors.alice);
+    // The fixture metric is "now", so both zones bucket it within the two-day margin.
+    await q("select "+fn("profile_settings")+"($1,'timezone','{\"timezone\":\"America/New_York\"}')",[subjects.alice]);
+    await owner();
+    const [p]=await q("select timezone,previous_timezone,timezone_changed_at from "+t("profiles")+" where id=$1",[subjects.alice]);
+    expect(p.timezone).toBe("America/New_York");
+    expect(p.previous_timezone).toBe("Asia/Kolkata");
+    expect(p.timezone_changed_at).toBeTruthy();
+    const jobs=await q("select day::text,rebucket from "+t("summary_jobs")+" where user_id=$1 and revision>processed_revision order by day",[subjects.alice]);
+    expect(jobs.length).toBe(5);
+    expect(jobs.every(j=>j.rebucket===true)).toBe(true);
+    const [entry]=await q("select metadata from "+t("audit_log")+" where target_user_id=$1 and action='profile_timezone_rebucket'",[subjects.alice]);
+    expect(entry.metadata.from).toBe("Asia/Kolkata"); expect(entry.metadata.to).toBe("America/New_York");
+  });
+  it("does not queue a re-bucket when the timezone is unchanged or no readings exist",async()=>{
+    await actAs(actors.alice);
+    await q("select "+fn("profile_settings")+"($1,'timezone','{\"timezone\":\"Asia/Kolkata\"}')",[subjects.alice]);
+    await owner(); await q("delete from "+t("summary_jobs")+" where user_id=$1",[subjects.alice]); await actAs(actors.alice);
+    await q("select "+fn("profile_settings")+"($1,'timezone','{\"timezone\":\"Asia/Kolkata\"}')",[subjects.alice]);
+    await owner();
+    expect(await q("select 1 from "+t("summary_jobs")+" where user_id=$1",[subjects.alice])).toHaveLength(0);
+    const [p]=await q("select previous_timezone from "+t("profiles")+" where id=$1",[subjects.alice]);
+    expect(p.previous_timezone).toBeNull();
+    await actAs(actors.bob);
+    await q("select "+fn("profile_settings")+"($1,'timezone','{\"timezone\":\"Europe/London\"}')",[subjects.bob]);
+    await owner();
+    expect(await q("select 1 from "+t("summary_jobs")+" where user_id=$1",[subjects.bob])).toHaveLength(0);
+    const [b]=await q("select timezone,previous_timezone from "+t("profiles")+" where id=$1",[subjects.bob]);
+    expect(b.timezone).toBe("Europe/London"); expect(b.previous_timezone).toBeNull();
+  });
+  it("rejects an unknown timezone",async()=>{
+    await actAs(actors.alice);
+    await expect(q("select "+fn("profile_settings")+"($1,'timezone','{\"timezone\":\"Mars/Olympus\"}')",[subjects.alice])).rejects.toMatchObject({code:"22023"});
+  });
+  it("does not let a different actor change a patient's timezone",async()=>{
+    await actAs(actors.bob);
+    await expect(q("select "+fn("profile_settings")+"($1,'timezone','{\"timezone\":\"Europe/London\"}')",[subjects.alice])).rejects.toMatchObject({code:"42501"});
+  });
+  it("flags a doctor's snapshot when the patient has since changed timezone (OQ005)",async()=>{
+    await actAs(actors.alice);
+    const [made]=await q("select "+fn("clinical_summary")+"($1,30,null,true) as s",[subjects.alice]);
+    expect(made.s.timezone_changed).toBe(false);
+    const snapshotId=made.s.id;
+    await q("select "+fn("profile_settings")+"($1,'timezone','{\"timezone\":\"America/New_York\"}')",[subjects.alice]);
+    await actAs(actors.doctor);
+    const [read]=await q("select "+fn("clinical_summary")+"($1,30,$2,false) as s",[subjects.alice,snapshotId]);
+    expect(read.s.timezone_changed).toBe(true);
+    expect(read.s.timezone).toBe("Asia/Kolkata");
+    // The stored body is untouched: an immutable snapshot stays exactly as it was shared.
+    expect(read.s.body.profile.timezone).toBe("Asia/Kolkata");
+  });
   it("rejects a display density outside simple, standard and advanced",async()=>{
     await actAs(actors.alice);
     await expect(q("select "+fn("profile_settings")+"($1,'display','{\"mode\":\"dense\"}')",[subjects.alice])).rejects.toMatchObject({code:"22023"});
@@ -597,6 +651,32 @@ describe("real Postgres: migrations, authentication guard, RLS and audited acces
     expect(summaries[7].recovery_score).toBe(100);
     expect(await q("select * from " + t("summary_jobs") + " where user_id=$1 and revision>processed_revision", [subjects.alice])).toHaveLength(0);
   }, 60000);
+  it("moves daily summaries onto the new local days when the timezone changes (OQ005)", async () => {
+    await owner(); await q("delete from " + t("daily_summaries") + " where user_id=$1", [subjects.alice]);
+    await q("delete from " + t("summary_jobs") + " where user_id=$1", [subjects.alice]);
+    await q("update " + t("profiles") + " set timezone='UTC',previous_timezone=null,timezone_changed_at=null where id=$1", [subjects.alice]);
+    await actAs(actors.alice); const id = await connect();
+    // 22:00 UTC is 03:30 the following day in Asia/Kolkata, so every reading moves one day.
+    await ingest(subjects.alice, id, Array.from({ length: 5 }, (_, i) => analyticsMetric(i + 1, "resting_heart_rate", 60, "bpm", "22")));
+    await owner();
+    const store = summaryStore();
+    for (let pass = 0; pass < 10 && (await runSummaryJobs(store, { limit: 20, timeBudgetMs: 50000 })).completed; pass++);
+    const before = await q("select day::text from " + t("daily_summaries") + " where user_id=$1 and rhr is not null order by day", [subjects.alice]);
+    expect(before.map(r => r.day)).toEqual(["2026-06-01", "2026-06-02", "2026-06-03", "2026-06-04", "2026-06-05"]);
+
+    await actAs(actors.alice);
+    await q("select " + fn("profile_settings") + "($1,'timezone','{\"timezone\":\"Asia/Kolkata\"}')", [subjects.alice]);
+    await owner();
+    expect(await q("select 1 from " + t("summary_jobs") + " where user_id=$1 and rebucket and revision>processed_revision", [subjects.alice])).not.toHaveLength(0);
+    for (let pass = 0; pass < 10 && (await runSummaryJobs(store, { limit: 20, timeBudgetMs: 50000 })).completed; pass++);
+
+    const after = await q("select day::text from " + t("daily_summaries") + " where user_id=$1 and rhr is not null order by day", [subjects.alice]);
+    expect(after.map(r => r.day)).toEqual(["2026-06-02", "2026-06-03", "2026-06-04", "2026-06-05", "2026-06-06"]);
+    // Raw readings are absolute instants and never move.
+    expect(await q("select 1 from " + t("metrics") + " where user_id=$1 and metric_type='resting_heart_rate'", [subjects.alice])).toHaveLength(5);
+    // Every queued day was processed and the re-bucket flag cleared.
+    expect(await q("select 1 from " + t("summary_jobs") + " where user_id=$1 and (rebucket or revision>processed_revision)", [subjects.alice])).toHaveLength(0);
+  }, 120000);
   it("fences stale workers, withholds revoked-consent work and retries failures durably", async () => {
     await actAs(actors.alice); const id = await connect();
     await ingest(subjects.alice, id, [analyticsMetric(1, "resting_heart_rate", 60, "bpm")]);

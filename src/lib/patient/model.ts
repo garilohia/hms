@@ -14,7 +14,10 @@ export type Summary = z.infer<typeof summarySchema>;
 export const alertSchema = z.object({ id:z.uuid(),severity:z.enum(["info","attention","urgent"]),metric_snapshot:z.object({body:z.string()}).passthrough(),fired_at:z.string(),
   event_start:z.string().nullable(),acknowledged_at:z.string().nullable(),escalation_due_at:z.string().nullable(),is_sample:z.boolean(),is_historical:z.boolean() });
 export type PatientAlert = z.infer<typeof alertSchema>;
+export const rebucketSchema = z.object({ from:z.string().nullable(),to:z.string(),changed_at:z.string().nullable(),pending:z.number() });
+export type RebucketState = z.infer<typeof rebucketSchema>;
 export const viewSchema = z.object({ profile:profileSchema,can_manage:z.boolean(),can_read_alerts:z.boolean(),can_read_history:z.boolean(),consent_given_by_guardian:z.boolean(),
+  rebucket:rebucketSchema.nullish(),stale_days:z.array(z.string()).optional(),
   contains_sample:z.boolean().optional(),pending_jobs:z.number().optional(),ingestion_consent:z.boolean().optional(),active_alert_count:z.number().optional(),
   summaries:z.array(summarySchema).optional(),alerts:z.array(alertSchema).optional(),
   insights:z.array(z.object({id:z.uuid(),category:z.string(),title:z.string(),body:z.string(),confidence:z.string(),evidence:z.record(z.string(),z.unknown())})).optional(),

@@ -9,6 +9,6 @@ export function DependentDetails({profile}:{profile:PatientProfile}){
     <label>Name<input name="name" required maxLength={120} defaultValue={profile.name}/></label><label>Date of birth<input name="dob" type="date" required defaultValue={profile.dob}/></label>
     <label>Sex at birth<select name="sex" required defaultValue={profile.sex_at_birth||""}><option value="" disabled>Choose</option><option value="female">Female</option><option value="male">Male</option><option value="intersex">Intersex</option><option value="prefer_not_to_say">Prefer not to say</option></select></label>
     <label>Country code<input name="country" required minLength={2} maxLength={2} defaultValue={profile.country_of_residence}/></label>
-    <label>History timezone<input name="timezone" required maxLength={100} defaultValue={profile.timezone}/></label><p className="muted">For example Asia/Kolkata or Europe/London. Set this before importing; post-import timezone changes are unavailable.</p>
+    <label>History timezone<input name="timezone" required maxLength={100} defaultValue={profile.timezone}/></label><p className="muted">For example Asia/Kolkata or Europe/London. Changing this recalculates the daily history that has already been imported.</p>
     <button className="button secondary" disabled={busy}>Save dependent details</button></form><p role="status">{status}</p></section>;
 }

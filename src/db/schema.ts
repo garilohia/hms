@@ -27,6 +27,7 @@ export const profiles = pgTable("profiles", {
   onboardingCompletedAt: at("onboarding_completed_at"), cycleTrackingEnabled: boolean("cycle_tracking_enabled").default(false).notNull(),
   medications: text("medications").array().default([]).notNull(),
   displayMode: text("display_mode").default("standard").notNull(),
+  previousTimezone: text("previous_timezone"), timezoneChangedAt: at("timezone_changed_at"),
 }, t => [index("profiles_owner_idx").on(t.ownerAccountId), check("profiles_identity_kind", sql`(${t.kind} = 'self' AND ${t.authUserId} IS NOT NULL AND ${t.ownerAccountId} = ${t.authUserId}) OR (${t.kind} = 'dependent' AND ${t.authUserId} IS NULL AND ${t.role} = 'patient')`)]).enableRLS();
 
 const patient = () => uuid("user_id").notNull().references(() => profiles.id, { onDelete: "cascade" });
@@ -46,6 +47,7 @@ export const summaryJobs = pgTable("summary_jobs", {
   id: id(), userId: patient(), day: date("day").notNull(), revision: integer("revision").default(1).notNull(),
   processedRevision: integer("processed_revision").default(0).notNull(), availableAt: at("available_at").defaultNow().notNull(),
   lockedUntil: at("locked_until"), leaseToken: uuid("lease_token"), attempts: integer("attempts").default(0).notNull(), lastError: text("last_error"),
+  rebucket: boolean("rebucket").default(false).notNull(),
 }, t => [uniqueIndex("summary_job_day").on(t.userId, t.day), index("summary_job_pending").on(t.availableAt).where(sql`${t.revision} > ${t.processedRevision}`)]).enableRLS();
 
 export const metrics = pgTable("metrics", {
@@ -173,7 +175,7 @@ export const caregiverLinks = pgTable("caregiver_links", {
   check("guardian_full_scope", sql`${t.role} <> 'guardian' OR (${t.grantedScopes} @> ARRAY['summary_only','full_history','alerts']::sharing_scope[])`)]).enableRLS();
 
 export const summarySnapshots = pgTable("summary_snapshots", {
-  id: id(), userId: patient(), body: json("body").notNull(), createdAt: created(),
+  id: id(), userId: patient(), body: json("body").notNull(), createdAt: created(), timezone: text("timezone"),
 }, t => [index("snapshots_user_idx").on(t.userId)]).enableRLS();
 
 export const profileTransfers = pgTable("profile_transfers", {

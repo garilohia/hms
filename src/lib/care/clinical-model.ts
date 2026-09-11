@@ -10,7 +10,7 @@ export const clinicalBodySchema=z.object({version:z.literal(1),generated_at:z.st
   alert_counts:z.array(z.object({severity:z.enum(["info","attention","urgent"]),count:z.number().int().nonnegative()})).max(3),
   documents:z.array(z.object({id:z.uuid(),type:z.string(),title:z.string(),uploaded_at:z.string()})).max(8),document_count:z.number().int().nonnegative(),
   disclaimer:z.literal("Generated from consumer wearable data; not a medical device.")});
-export const clinicalSnapshotSchema=z.object({id:z.uuid().nullable(),body:clinicalBodySchema});
+export const clinicalSnapshotSchema=z.object({id:z.uuid().nullable(),body:clinicalBodySchema,timezone:z.string().nullish(),timezone_changed:z.boolean().default(false)});
 export type ClinicalBody=z.infer<typeof clinicalBodySchema>;
 export type ClinicalDay=z.infer<typeof clinicalDaySchema>;
 export const clinicalMetrics=[

@@ -7,6 +7,7 @@ import { DataChart } from "../ui/chart";
 import { addDays } from "@/src/lib/analytics/time";
 import { buildSeries, formatValue, type DayValue } from "@/src/lib/patient/chart";
 import type { Summary } from "@/src/lib/patient/model";
+import { RebucketNotice } from "../ui/rebucket";
 const STALE_AFTER_MS=6*60*60*1000;
 function subscribeMinute(callback:()=>void) { const timer=setInterval(callback,60000); return ()=>clearInterval(timer); }
 function formatDate(day:string) { const date=new Date(day+"T00:00:00Z"); return Number.isNaN(date.getTime())?day:date.toLocaleDateString("en-GB",{weekday:"long",timeZone:"UTC"})+", "+date.toLocaleDateString("en-GB",{day:"numeric",month:"long",timeZone:"UTC"}); }
@@ -58,14 +59,14 @@ export function Today({initial,today}:{initial:PatientView;today:string}) {
     if(!initial.pending_jobs || !initial.ingestion_consent || !initial.can_manage) return;
     const controller=new AbortController();
     async function compute() {
-      setBusy(true); setMessage("Your readings are saved. Updating your summary…");
+      setBusy(true); setMessage(initial.rebucket?"Recalculating your history for the new timezone…":"Your readings are saved. Updating your summary…");
       try {
         for(let n=0;n<20;n++) {
           await patientPost("/api/patient/refresh",{userId},controller.signal);
           const next=await readView(userId,"today",{signal:controller.signal}); setView(next);
           if(!next.pending_jobs) {setMessage("");return;}
         }
-        setMessage("Some summaries are still queued. Refresh this page later.");
+        setMessage(initial.rebucket?"Your history is still being recalculated. Open this screen again to continue.":"Some summaries are still queued. Refresh this page later.");
       } catch { if(!controller.signal.aborted) setMessage("Your readings are saved. Refresh later to retry the summary."); }
       finally { if(!controller.signal.aborted) setBusy(false); }
     }
@@ -100,6 +101,7 @@ export function Today({initial,today}:{initial:PatientView;today:string}) {
     catch(error){setMessage(error instanceof Error?error.message:"Please try again.");} finally{setBusy(false);}
   }
   return <div className="stack">
+    {view.rebucket&&<RebucketNotice state={view.rebucket}/>}
     <header className="page-header"><h1 className="page-title">Today</h1><p className="page-date">{formatDate(today)}</p><Freshness syncedAt={summary?.computed_at??null} timezone={view.profile.timezone}/></header>
     {live==="offline"&&<p className="muted" role="status">Live connection interrupted; retrying automatically</p>}
     {showMetrics&&latestRhr!==null&&<MetricCard testId={alert?undefined:"today-hero"} sample={view.contains_sample} icon={metricIcons.rhr} label="Resting heart rate" value={formatValue(latestRhr)} unit="bpm" sentence={rhr.sentence+(baselineNote?" "+baselineNote:"")} values={(rows??[]).map(r=>({day:r.day,value:r.rhr}))} kind="line"/>}
