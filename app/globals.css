@@ -43,9 +43,11 @@
 
 :root {
   /* §4.7 radius and spacing */
-  --radius-input: 4px;
-  --radius-card: 12px;
-  --radius-sheet: 20px;
+  /* Founder override of DESIGN.md §4.7 (D030): Apple-like radii with continuous corners. */
+  --radius-input: 10px;
+  --radius-button: 14px;
+  --radius-card: 20px;
+  --radius-sheet: 28px;
   --space-unit: 4px;
   --space-card: 20px;
   --space-section: 32px;
@@ -117,11 +119,12 @@
   --drop-shadow-*: initial;
   --radius-*: initial;
   --radius-input: var(--radius-input);
+  --radius-button: var(--radius-button);
   --radius-card: var(--radius-card);
   --radius-sheet: var(--radius-sheet);
   --radius-sm: var(--radius-input);
   --radius-md: var(--radius-input);
-  --radius-lg: var(--radius-input);
+  --radius-lg: var(--radius-button);
   --radius-xl: var(--radius-card);
   --radius-2xl: var(--radius-sheet);
   --radius-full: 9999px;
@@ -173,6 +176,8 @@ body {
   line-height: 1.55;
 }
 * { box-sizing: border-box; }
+/* Continuous (squircle) corners on every rounded surface; browsers without corner-shape keep circular arcs. */
+.card, .panel, .button, .badge, .sample-badge, .update-badge, .chip, .chips button, .chip-toggle, .main-tabs, .connection-card, .profile-control > span, input:not([type=checkbox]):not([type=radio]), select, textarea, code { corner-shape: squircle; }
 h1, h2, h3, h4 { margin: 0; overflow-wrap: anywhere; }
 p, li { max-width: 70ch; }
 a { color: var(--accent); text-underline-offset: 3px; }
@@ -189,13 +194,13 @@ button:not(:disabled), select { cursor: pointer; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 button:disabled { opacity: .5; cursor: wait; }
 input:not([type=checkbox]):not([type=radio]), select, textarea { background: var(--surface); color: var(--ink); border: 1px solid var(--rule); border-radius: var(--radius-input); padding: .7rem; min-height: 44px; }
-input[type=checkbox] { width: 1.2rem; height: 1.2rem; accent-color: var(--accent); flex-shrink: 0; }
+input[type=checkbox] { width: 1.2rem; height: 1.2rem; border-radius: 6px; accent-color: var(--accent); flex-shrink: 0; }
 input[type=date], input[type=file] { min-width: 0; width: 100%; }
 
 /* ------------------------------------------------------------------ */
 /* Frame */
 /* ------------------------------------------------------------------ */
-.app-frame { width: 100%; max-width: 680px; margin: 0 auto; padding: 0 20px 104px; }
+.app-frame { width: 100%; max-width: 680px; margin: 0 auto; padding: 0 20px calc(116px + env(safe-area-inset-bottom)); }
 .app-header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 24px 0; }
 .app-brand { font-family: var(--font-serif); font-weight: 500; font-size: var(--text-title); color: var(--ink); text-decoration: none; }
 .app-header > a:last-of-type { font-size: var(--text-label); font-weight: 500; }
@@ -211,8 +216,8 @@ input[type=date], input[type=file] { min-width: 0; width: 100%; }
 .page-title { font-family: var(--font-serif); font-weight: 500; font-size: var(--text-title); line-height: 1.2; margin-bottom: 24px; }
 
 /* Tab bar: --surface, --rule top hairline, sage active state, icon plus word. Never a lit edge (§7.4). */
-.main-tabs { position: fixed; z-index: 10; bottom: 0; left: 50%; transform: translateX(-50%); width: min(100%, 680px); display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); background: var(--surface); border-top: 1px solid var(--rule); padding: 6px 12px calc(6px + env(safe-area-inset-bottom)); }
-.main-tabs a { display: flex; flex-direction: column; align-items: center; gap: 3px; min-height: 48px; padding: 8px 4px; border-radius: var(--radius-input); font-size: var(--text-axis); font-weight: 500; color: var(--ink-soft); text-decoration: none; transition: color 150ms ease-out; }
+.main-tabs { position: fixed; z-index: 10; bottom: calc(12px + env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); width: min(100% - 24px, 656px); display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); background: var(--surface); border: 1px solid var(--rule); border-top-color: var(--rule-lit); border-radius: var(--radius-sheet); padding: 6px 10px; }
+.main-tabs a { display: flex; flex-direction: column; align-items: center; gap: 3px; min-height: 48px; padding: 8px 4px; border-radius: var(--radius-button); font-size: var(--text-axis); font-weight: 500; color: var(--ink-soft); text-decoration: none; transition: color 150ms ease-out; }
 .main-tabs a svg { width: 22px; height: 22px; }
 .main-tabs a[aria-current=page] { color: var(--accent); }
 
@@ -224,7 +229,7 @@ input[type=date], input[type=file] { min-width: 0; width: 100%; }
 .card h2, .card h3 { font-weight: 600; }
 .card > h2:first-child, .card > div:first-child > h2 { font-size: var(--text-section); }
 /* Nested panel inside a card. */
-.panel { background: var(--surface-2); border-radius: var(--radius-input); padding: 12px; }
+.panel { background: var(--surface-2); border-radius: var(--radius-button); padding: 12px; }
 .stack { display: flex; flex-direction: column; gap: 18px; }
 .section-gap { display: flex; flex-direction: column; gap: var(--space-section); }
 .muted { color: var(--ink-soft); font-size: var(--text-label); }
@@ -239,7 +244,7 @@ input[type=date], input[type=file] { min-width: 0; width: 100%; }
 .chips .badge, .chips .sample-badge { min-height: 0; }
 
 /* Button: sage fill with on-accent text. Secondary keeps the sage word on a hairline so it still reads as tappable. */
-.button { display: inline-flex; justify-content: center; align-items: center; gap: 8px; min-height: 44px; border-radius: var(--radius-card); padding: 10px 18px; background: var(--accent); color: var(--on-accent); font-weight: 500; text-align: center; text-decoration: none; border: 1px solid transparent; transition: opacity 150ms ease-out; }
+.button { display: inline-flex; justify-content: center; align-items: center; gap: 8px; min-height: 44px; border-radius: var(--radius-button); padding: 10px 18px; background: var(--accent); color: var(--on-accent); font-weight: 500; text-align: center; text-decoration: none; border: 1px solid transparent; transition: opacity 150ms ease-out; }
 .button:not(:disabled):active { opacity: .85; }
 .button.secondary { color: var(--accent); border: 1px solid var(--rule); background: var(--surface); }
 .button:disabled { opacity: .5; }
@@ -270,9 +275,10 @@ input[type=date], input[type=file] { min-width: 0; width: 100%; }
 .list-row { padding: 18px 0; border-bottom: 1px solid var(--rule); display: flex; gap: 12px; justify-content: space-between; align-items: center; color: inherit; text-decoration: none; }
 .list-row:first-child { padding-top: 0; }
 .list-row:last-child { border: 0; padding-bottom: 0; }
-a.list-row > span:first-child { color: var(--accent); font-weight: 500; }
+a.list-row { color: var(--accent); font-weight: 500; }
+a.list-row .muted { color: var(--ink-soft); font-weight: 400; }
 .connection-grid { display: grid; gap: 12px; }
-.connection-card { background: var(--surface-2); border-radius: var(--radius-input); padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.connection-card { background: var(--surface-2); border-radius: var(--radius-button); padding: 16px; display: flex; flex-direction: column; gap: 12px; }
 .connection-card .button, .connection-card .badge { align-self: flex-start; }
 .form-field { display: flex; flex-direction: column; gap: 6px; }
 .check-field { display: flex; align-items: flex-start; gap: 12px; }

@@ -38,5 +38,6 @@ export const typeScale = {
 } as const;
 
 export const rootFontSizePx = 17;
-export const radius = { input: 4, card: 12, sheet: 20 } as const;
+// Founder override of DESIGN.md §4.7 (D030): Apple-like scale with continuous corners where the browser supports corner-shape.
+export const radius = { input: 10, button: 14, card: 20, sheet: 28 } as const;
 export const spacing = { unit: 4, cardPadding: 20, sectionGap: 32 } as const;
