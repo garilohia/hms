@@ -1,7 +1,7 @@
 import Link from "next/link";
 export default function TermsPage() {
   return <main className="onboarding stack"><h1 className="page-title">Terms of use</h1>
-    <p className="muted">Version 2026-09-08 · Development-preview terms pending legal review</p>
+    <p className="muted">Version 2026-09-08. Development-preview terms pending legal review</p>
     <section className="card stack"><h2>Purpose and limits</h2><p>HMS organises personal health history and facilitates sharing with a care team. It is not a medical device and does not diagnose conditions, provide medical advice or guarantee the accuracy or completeness of device readings. Read the <Link className="underline" href="/legal/disclaimer">health disclaimer</Link>.</p>
       <p>HMS is not for emergencies. Notifications and consultations can be delayed or unavailable. If you feel unwell or need urgent help, contact your doctor or local emergency services. Do not wait for this app.</p></section>
     <section className="card stack"><h2>Accounts, guardians and information</h2><p>You must be at least 18 to create an account. Supply accurate information, protect your sign-in links, and upload only data you own or are authorised to manage. Do not impersonate a doctor or another person.</p>

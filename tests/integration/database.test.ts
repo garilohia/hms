@@ -364,11 +364,16 @@ describe("real Postgres: migrations, authentication guard, RLS and audited acces
     await q("select "+fn("profile_settings")+"($1,'identity',$2::text::jsonb)",[subjects.alice,JSON.stringify({name:"Alice",dob:"1990-01-01",sex:"female",country:"IN",timezone:"Asia/Kolkata"})]);
     await q("select "+fn("profile_settings")+"($1,'complete','{\"disclaimer\":true}')",[subjects.alice]);
     await q("select "+fn("profile_settings")+"($1,'cycle','{\"enabled\":true}')",[subjects.alice]);
+    await q("select "+fn("profile_settings")+"($1,'display','{\"mode\":\"advanced\"}')",[subjects.alice]);
     await q("select "+fn("record_consent")+"($1,'data_ingestion',true,'test',$2)",[subjects.alice,hash]);
     await q("select "+fn("profile_settings")+"($1,'period',$2::text::jsonb)",[subjects.alice,JSON.stringify({start:"2026-08-01",end:"2026-08-05"})]);
-    const [p]=await q("select onboarding_completed_at,cycle_tracking_enabled from "+t("profiles")+" where id=$1",[subjects.alice]);
-    expect(p.onboarding_completed_at).toBeTruthy(); expect(p.cycle_tracking_enabled).toBe(true);
+    const [p]=await q("select onboarding_completed_at,cycle_tracking_enabled,display_mode from "+t("profiles")+" where id=$1",[subjects.alice]);
+    expect(p.onboarding_completed_at).toBeTruthy(); expect(p.cycle_tracking_enabled).toBe(true); expect(p.display_mode).toBe("advanced");
     const [log]=await q("select origin from "+t("cycle_logs")+" where user_id=$1",[subjects.alice]); expect(log.origin).toBe("manual");
+  });
+  it("rejects a display density outside simple, standard and advanced",async()=>{
+    await actAs(actors.alice);
+    await expect(q("select "+fn("profile_settings")+"($1,'display','{\"mode\":\"dense\"}')",[subjects.alice])).rejects.toMatchObject({code:"22023"});
   });
   it("does not let a different actor edit a patient's identity",async()=>{
     await actAs(actors.bob);

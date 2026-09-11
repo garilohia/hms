@@ -86,6 +86,11 @@ export function Today({initial,today}:{initial:PatientView;today:string}) {
   const latestSleep=[...(rows??[])].sort((a,b)=>b.day.localeCompare(a.day)).find(r=>r.sleep_duration_min!==null)?.sleep_duration_min??summary?.sleep_duration_min??null;
   const latestRhr=rhr.series.last?.value??summary?.rhr??null;
   const showMetrics=Boolean(rows&&rows.length&&(latestRhr!==null||latestSleep!==null));
+  // DESIGN.md §9. Simple: one hero metric and at most three cards, no raw values. Advanced: the numeric baseline under the hero.
+  const mode=view.profile.display_mode;
+  const cardBudget=mode==="simple"?3-(showMetrics&&latestRhr!==null?1:0)-(alert||!showMetrics?1:0):3;
+  const insights=(view.insights??[]).slice(0,Math.max(0,cardBudget));
+  const baselineNote=mode==="advanced"&&rhr.series.lastBand?"Usual range "+formatValue(rhr.series.lastBand.low)+" to "+formatValue(rhr.series.lastBand.high)+" bpm from "+rhr.series.baselineDays+" of 28 days.":null;
   // §6: two visual states. Urgent keeps its own rule; every other severity uses the attention pattern.
   const alertClass=alert?(alert.severity==="urgent"?"alert-urgent":"alert-attention"):"";
   async function acknowledge() {
@@ -96,9 +101,9 @@ export function Today({initial,today}:{initial:PatientView;today:string}) {
   }
   return <div className="stack">
     <header className="page-header"><h1 className="page-title">Today</h1><p className="page-date">{formatDate(today)}</p><Freshness syncedAt={summary?.computed_at??null} timezone={view.profile.timezone}/></header>
-    <p className="muted" role="status"><span className={live==="live"?"live-dot":"live-dot offline"} aria-hidden="true" /> {live==="live"?"Live updates connected":live==="connecting"?"Connecting live updates…":"Live connection interrupted; retrying automatically"}</p>
-    {showMetrics&&latestRhr!==null&&<MetricCard testId={alert?undefined:"today-hero"} sample={view.contains_sample} icon={metricIcons.rhr} label="Resting heart rate" value={formatValue(latestRhr)} unit="bpm" sentence={rhr.sentence} values={(rows??[]).map(r=>({day:r.day,value:r.rhr}))} kind="line"/>}
-    {showMetrics&&latestSleep!==null&&<MetricCard icon={metricIcons.sleep} label="Sleep" value={sleepLabel(latestSleep)} sentence={"Last night. "+sleepSeries.sentence} values={sleepValues} kind="bars"/>}
+    {live==="offline"&&<p className="muted" role="status">Live connection interrupted; retrying automatically</p>}
+    {showMetrics&&latestRhr!==null&&<MetricCard testId={alert?undefined:"today-hero"} sample={view.contains_sample} icon={metricIcons.rhr} label="Resting heart rate" value={formatValue(latestRhr)} unit="bpm" sentence={rhr.sentence+(baselineNote?" "+baselineNote:"")} values={(rows??[]).map(r=>({day:r.day,value:r.rhr}))} kind="line"/>}
+    {showMetrics&&mode!=="simple"&&latestSleep!==null&&<MetricCard icon={metricIcons.sleep} label="Sleep" value={sleepLabel(latestSleep)} sentence={"Last night. "+sleepSeries.sentence} values={sleepValues} kind="bars"/>}
     {(alert||!showMetrics)&&<section className={"card stack "+alertClass} data-testid="today-hero">
       {(view.contains_sample || alert?.is_sample) && <span className="badge">Sample data</span>}
       {view.consent_given_by_guardian && <p className="muted">Consent given by guardian</p>}
@@ -112,14 +117,14 @@ export function Today({initial,today}:{initial:PatientView;today:string}) {
         <h2 className="type-section">Your readiness</h2>
         <p className="hero-figure"><span className="hero-score">{summary.readiness_score??"—"}</span>{summary.readiness_score!==null&&<span className="unit">/ 100</span>}</p>
         <p>{summary.readiness_score===null?"A score needs resting heart rate, HRV and sleep, with at least seven prior days for each.":"A guide to your recent recovery. Not a medical assessment."}</p>
-        <p className="muted">Latest readings: {summary.day}. Resting HR {summary.rhr??"—"} bpm · HRV {summary.hrv_avg===null?"—":Math.round(summary.hrv_avg)} ms · Sleep {summary.sleep_duration_min===null?"—":(summary.sleep_duration_min/60).toFixed(1)} h.</p>
+        {mode!=="simple"&&<p className="muted">Latest readings: {summary.day}. Resting HR {summary.rhr??"—"} bpm, HRV {summary.hrv_avg===null?"—":Math.round(summary.hrv_avg)} ms, sleep {summary.sleep_duration_min===null?"—":(summary.sleep_duration_min/60).toFixed(1)} h.</p>}
         <a className="underline text-sm" href={"/more/advanced?profile="+userId}>How this score works</a>
       </>:<><h2 className="type-section">Your history starts here.</h2><p>Import your readings or explore clearly labelled sample data.</p>{view.can_manage&&<a className="button secondary" href={"/more/data?profile="+userId}>Connect data</a>}</>}
       {message&&<p role="status" className="muted">{message}</p>}
     </section>}
     {showMetrics&&!alert&&message&&<p role="status" className="muted">{message}</p>}
     {showMetrics&&!alert&&view.consent_given_by_guardian&&<p className="muted">Consent given by guardian</p>}
-    {(view.insights??[]).slice(0,3).map(insight=><article className="card insight stack" key={insight.id} data-testid="insight-card">
+    {insights.map(insight=><article className="card insight stack" key={insight.id} data-testid="insight-card">
       {view.contains_sample&&<span className="badge">Sample data</span>}<h2>{insight.title}</h2><p>{insight.body}</p><p className="muted">Confidence: {insight.confidence}.</p>
       <footer><a className="underline" href="/legal/disclaimer">Discuss with your doctor.</a></footer>
     </article>)}

@@ -4,7 +4,9 @@ import { isValidBirthDate } from "../auth/validation";
 
 const num = z.union([z.number(),z.string()]).transform(Number).refine(Number.isFinite).nullable();
 export const profileSchema = z.object({ id:z.uuid(),name:z.string(),dob:z.string(),kind:z.enum(["self","dependent"]),timezone:z.string(),
-  sex_at_birth:z.string().nullable(),country_of_residence:z.string(),onboarding_completed_at:z.string().nullable(),cycle_tracking_enabled:z.boolean() });
+  sex_at_birth:z.string().nullable(),country_of_residence:z.string(),onboarding_completed_at:z.string().nullable(),cycle_tracking_enabled:z.boolean(),display_mode:z.enum(["simple","standard","advanced"]).default("standard") });
+export const displayModes=["simple","standard","advanced"] as const;
+export type DisplayMode=typeof displayModes[number];
 export type PatientProfile = z.infer<typeof profileSchema>;
 export const summarySchema = z.object({ day:z.string(),rhr:num,hrv_avg:num,spo2_avg:num,spo2_min:num,sleep_duration_min:num,skin_temp_deviation:num,weight_kg:num,steps:num,
   bp_systolic:num,bp_diastolic:num,readiness_score:num,computed_at:z.string().optional(),contains_sample:z.boolean(),source_ids:z.record(z.string(),z.string()),recovery_evidence:z.record(z.string(),z.unknown()) });

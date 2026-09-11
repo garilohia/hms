@@ -19,7 +19,7 @@ export function ConsultRoom({initial,actor}:{initial:z.infer<typeof consultViewS
     catch(e){setStatus((e instanceof Error?e.message:"Could not save.")+(saved?" Saved, but the view could not refresh. Use Refresh messages.":" The change may have saved. Refresh to check, or retry an unchanged message."));}finally{setBusy(false);}
   }
   async function schedule(e:FormEvent<HTMLFormElement>){e.preventDefault();const data=new FormData(e.currentTarget);await act("schedule",{scheduledFor:new Date(String(data.get("time"))).toISOString(),callUrl:data.get("url")});}
-  return <div className="stack"><section className="card stack"><h2>{view.patient_name} · {view.doctor_name}</h2><p>{c.type.replaceAll("_"," ")} · <strong>{c.status}</strong></p>
+  return <div className="stack"><section className="card stack"><h2>{view.patient_name} with {view.doctor_name}</h2><p>{c.type.replaceAll("_"," ")}, <strong>{c.status}</strong></p>
     {view.is_sample&&<p className="sample-badge">Sample data. This is a demonstration, not a real consultation.</p>}
     {c.patient_note&&<p>{c.patient_note}</p>}{c.scheduled_for&&<p>Scheduled: {c.scheduled_for.replace("T"," ")} (UTC)</p>}
     {c.attached_summary_id&&<a href={"/api/clinical-summary?profile="+c.patient_id+"&snapshot="+c.attached_summary_id}>Download attached summary</a>}
@@ -32,7 +32,7 @@ export function ConsultRoom({initial,actor}:{initial:z.infer<typeof consultViewS
     <label>Appointment time (your browser timezone)<input type="datetime-local" name="time" required/></label><label>Optional Google Meet or Zoom link<input type="url" name="url" maxLength={300} placeholder="https://meet.google.com/…"/></label>
     <p className="muted">Paste a link you have arranged. HMS does not create a video meeting.</p><button className="button secondary" disabled={busy}>Save appointment</button></form></section>}
   <section className="card stack"><h2>Messages</h2><button className="button secondary" disabled={busy} onClick={()=>refresh()}>Refresh messages</button>
-    {view.messages.length?[...view.messages].reverse().map(m=><div key={m.id} className="message-row"><p className="muted">{m.sender_id===actor?"You":"Other participant"} · {m.sent_at.replace("T"," ")}</p><p style={{whiteSpace:"pre-wrap",overflowWrap:"anywhere"}}>{m.body}</p></div>):<p className="muted">No messages yet.</p>}
+    {view.messages.length?[...view.messages].reverse().map(m=><div key={m.id} className="message-row"><p className="muted">{m.sender_id===actor?"You":"Other participant"}, {m.sent_at.replace("T"," ")}</p><p style={{whiteSpace:"pre-wrap",overflowWrap:"anywhere"}}>{m.body}</p></div>):<p className="muted">No messages yet.</p>}
     {view.next_cursor&&<button className="button secondary" disabled={busy} onClick={()=>refresh(true)}>Earlier messages</button>}
     {open?<form className="stack" onSubmit={e=>{e.preventDefault();void act("message",{body:message,messageId:messageIds.current.id(c.id,message)});}}><label>Message<textarea required disabled={busy} maxLength={4000} value={message} onChange={e=>setMessage(e.target.value)}/></label><button className="button" disabled={busy||!message.trim()}>Send message</button></form>:<p className="muted">Chat opens after acceptance and closes with the consult.</p>}
   </section>

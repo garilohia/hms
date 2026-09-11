@@ -26,6 +26,7 @@ export const profiles = pgTable("profiles", {
   role: profileRole("role").default("patient").notNull(), createdAt: created(),
   onboardingCompletedAt: at("onboarding_completed_at"), cycleTrackingEnabled: boolean("cycle_tracking_enabled").default(false).notNull(),
   medications: text("medications").array().default([]).notNull(),
+  displayMode: text("display_mode").default("standard").notNull(),
 }, t => [index("profiles_owner_idx").on(t.ownerAccountId), check("profiles_identity_kind", sql`(${t.kind} = 'self' AND ${t.authUserId} IS NOT NULL AND ${t.ownerAccountId} = ${t.authUserId}) OR (${t.kind} = 'dependent' AND ${t.authUserId} IS NULL AND ${t.role} = 'patient')`)]).enableRLS();
 
 const patient = () => uuid("user_id").notNull().references(() => profiles.id, { onDelete: "cascade" });

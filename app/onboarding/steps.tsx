@@ -1,10 +1,11 @@
 "use client";
 import { useState,type FormEvent } from "react";
 import { patientPost,type PatientProfile } from "@/src/lib/patient/model";
+import { DisplayModePicker } from "../more/display/picker";
 import { DataImport } from "../more/data/upload";
 export function Onboarding({initial,emailEnabled}:{initial:PatientProfile;emailEnabled:boolean}) {
   const [step,setStep]=useState(1),[profile,setProfile]=useState(initial),[busy,setBusy]=useState(false),[importing,setImporting]=useState(false),[error,setError]=useState("");
-  const [cycle,setCycle]=useState(initial.cycle_tracking_enabled),[contactConsent,setContactConsent]=useState(false),[emailConsent,setEmailConsent]=useState(false),[disclaimer,setDisclaimer]=useState(false);
+  const [mode,setMode]=useState(initial.display_mode),[cycle,setCycle]=useState(initial.cycle_tracking_enabled),[contactConsent,setContactConsent]=useState(false),[emailConsent,setEmailConsent]=useState(false),[disclaimer,setDisclaimer]=useState(false);
   async function submit(event:FormEvent<HTMLFormElement>) {
     event.preventDefault();setBusy(true);setError("");
     const values=Object.fromEntries(new FormData(event.currentTarget));
@@ -12,6 +13,7 @@ export function Onboarding({initial,emailEnabled}:{initial:PatientProfile;emailE
       if(step===1) {
         await patientPost("/api/profiles/settings",{userId:profile.id,action:"identity",payload:values});
         await patientPost("/api/profiles/settings",{userId:profile.id,action:"cycle",payload:{enabled:cycle}});
+        await patientPost("/api/profiles/settings",{userId:profile.id,action:"display",payload:{mode}});
         setProfile({...profile,timezone:String(values.timezone)});setStep(2);
       } else if(step===3) {
         if(values.email) {
@@ -43,6 +45,7 @@ export function Onboarding({initial,emailEnabled}:{initial:PatientProfile;emailE
           <datalist id="timezones">{["Asia/Kolkata","Asia/Dubai","Europe/London","America/New_York","America/Los_Angeles","Australia/Sydney"].map(t=><option key={t} value={t}/>)}</datalist>
           <p className="muted">Your daily history uses this timezone. Choose it before importing; it cannot be changed after an import in this version.</p>
           <label className="check-field"><input type="checkbox" checked={cycle} onChange={e=>setCycle(e.target.checked)}/><span>Show cycle estimates (optional). For planning training and energy. Not for fertility or contraception.</span></label>
+          <DisplayModePicker value={mode} onChange={setMode}/>
           <p className="muted">Under 18? An adult guardian creates a dependent profile from their account.</p>
         </>}
         {step===3&&<>

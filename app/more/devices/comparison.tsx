@@ -33,8 +33,8 @@ export function DeviceComparison({ devices }: { devices: Device[] }) {
         <p>{d.editorial_note}</p>
         <p><strong>Updates:</strong> {d.connection_path}. {d.latency_label}</p>
         <p className="muted">{d.realtime_capable ? "A live stream is technically possible with the vendor's approved native/partner access." : "This route does not provide a continuous live stream to HMS."}</p>
-        {features.length > 0 && <p className="muted">Verified listed features: {features.join(" · ")}</p>}
-        <p className="muted">{d.has_screen ? "With a screen" : "No screen"} · {d.battery_days === null ? "Battery days not listed" : "Up to " + (d.battery_days < 2 ? d.battery_days * 24 + " hours" : d.battery_days + " days")}</p>
+        {features.length > 0 && <p className="muted">Verified listed features: {features.join(", ")}</p>}
+        <p className="muted">{d.has_screen ? "With a screen" : "No screen"}. {d.battery_days === null ? "Battery days not listed" : "Up to " + (d.battery_days < 2 ? d.battery_days * 24 + " hours" : d.battery_days + " days")}</p>
         {d.subscription_required && <p><strong>Paid membership for full features.</strong> {d.subscription_cost}</p>}
         <details><summary>Measurements and sources</summary><div className="stack mt-3"><p className="muted">Selected device-side measurements: {d.metrics_supported.map(m => m.replaceAll("_", " ")).join(", ")}. This is not an import compatibility list.</p>{d.source_urls.map((url, i) => <a className="text-link" href={url} key={url} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer">Manufacturer source {i + 1} ({new URL(url).hostname})</a>)}</div></details>
         {price === null && <a className="text-link" href={d.source_urls[0]} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer">Check price with manufacturer</a>}

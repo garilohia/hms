@@ -1,7 +1,7 @@
 import Link from "next/link";
 export default function PrivacyPage() {
   return <main className="onboarding stack"><h1 className="page-title">Privacy notice</h1>
-    <p className="muted">Version 2026-09-08 · HMS development preview</p>
+    <p className="muted">Version 2026-09-08, HMS development preview</p>
     <p>This notice describes the current application. The operating entity, grievance contact, retention schedule and launch legal review are not yet finalised. Do not use this preview for real children’s data until parental verification is approved. This page is not a certification of legal compliance.</p>
     <section className="card stack"><h2>What we collect and why</h2>
       <p>Account email, name and date of birth support adult sign-in and profile ownership. Optional sex, height, country and home timezone help present personal history. Guardian-created dependent profiles have their own health history and no sign-in account.</p>

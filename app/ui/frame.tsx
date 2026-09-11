@@ -14,12 +14,12 @@ export function AppFrame({children,profile,profiles=[]}:{children:ReactNode;prof
   const path=usePathname();
   const suffix=profile?"?profile="+profile.id:"";
   // Full navigations recheck current sharing and avoid cached private RSC views.
-  return <div className="app-frame">
+  return <div className="app-frame" data-mode={profile?.display_mode??"standard"}>
     <header className="app-header"><a className="app-brand" href={"/today"+suffix}>HMS</a><a href={"/more"+suffix}>More</a>
       {profile && <div className="profile-control">{profiles.length>1?<label>Viewing profile<select aria-label="Viewing profile" value={profile.id} onChange={e=>{window.location.href=path+"?profile="+e.target.value;}}>
-        {!profiles.some(p=>p.id===profile.id)&&<option value={profile.id}>{profile.name} · Shared, read-only</option>}
-        {profiles.map(p=><option key={p.id} value={p.id}>{p.name}{p.kind==="dependent"?" · Dependent":""}</option>)}
-      </select></label>:<span>{profile.name}{profile.kind==="dependent"?" · Dependent":""}</span>}</div>}
+        {!profiles.some(p=>p.id===profile.id)&&<option value={profile.id}>{profile.name} (shared, read-only)</option>}
+        {profiles.map(p=><option key={p.id} value={p.id}>{p.name}{p.kind==="dependent"?" (dependent)":""}</option>)}
+      </select></label>:<span>{profile.name}{profile.kind==="dependent"?" (dependent)":""}</span>}</div>}
     </header>
     <main>{children}</main>
     <nav aria-label="Main tabs" className="main-tabs">{["Today","Doctors","History"].map(name=>{const href="/"+name.toLowerCase();return <a key={name} aria-current={path===href?"page":undefined} href={href+suffix}>{tabIcons[name]}{name}</a>;})}</nav>

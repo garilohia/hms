@@ -88,6 +88,22 @@ test("design audit: every route at 390px in light and dark",async({browser,baseU
       await page.getByRole("button",{name:"7 days",exact:true}).click();await expect(page.getByRole("button",{name:"7 days",exact:true})).toBeEnabled();await page.waitForTimeout(800);
       await page.screenshot({path:`${outDir}/history-7days-${scheme}.png`,fullPage:true});shots.push({name:"history-7days",scheme,route:"/history (7 days)",scrollWidth:await page.evaluate(()=>document.documentElement.scrollWidth),status:200});
     });
+    // Densities (DESIGN.md §9) and 200% text (§10) on the patient account.
+    for(const mode of ["simple","advanced"] as const) {
+      await patientPage.goto("/more/display");await patientPage.getByRole("radio",{name:new RegExp("^"+mode,"i")}).check();
+      await expect(patientPage.getByRole("status").filter({hasText:"Saved."})).toBeVisible();
+      await withSchemes(browser,patientContext,async(page,scheme)=>{ await capture(page,scheme,"/today","today-"+mode); await capture(page,scheme,"/history","history-"+mode); });
+    }
+    await patientPage.goto("/more/display");await patientPage.getByRole("radio",{name:/^standard/i}).check();await expect(patientPage.getByRole("status").filter({hasText:"Saved."})).toBeVisible();
+    await withSchemes(browser,patientContext,async(page,scheme)=>{
+      if(scheme!=="light") return;
+      for(const route of ["/today","/history","/more"]) {
+        await page.goto(route,{waitUntil:"load"});await page.evaluate(()=>{document.documentElement.style.fontSize="34px";});await page.waitForTimeout(800);
+        const scrollWidth=await page.evaluate(()=>document.documentElement.scrollWidth);
+        await page.screenshot({path:`${outDir}/${fileName(route)}-200pct-${scheme}.png`,fullPage:true});shots.push({name:fileName(route)+"-200pct",scheme,route:route+" at 200% text",scrollWidth,status:200});
+        expect(scrollWidth,route+" at 200% text must not scroll horizontally").toBe(390);
+      }
+    });
     await withSchemes(browser,caregiverContext,async(page,scheme)=>{
       await capture(page,scheme,"/today?profile="+patient.subject,"caregiver-today");
       await capture(page,scheme,"/doctor/alerts?profile="+patient.subject,"caregiver-alerts");

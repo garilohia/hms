@@ -246,6 +246,20 @@
       "when": 1789049169001,
       "tag": "0034_native_source_key_fix",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1789116056031,
+      "tag": "0035_display_mode",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1789116424248,
+      "tag": "0036_patient_view_display_mode",
+      "breakpoints": true
     }
   ]
 }

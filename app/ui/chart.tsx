@@ -5,12 +5,14 @@ import { buildSeries, describeSeries, formatDay, formatValue, type ChartKind, ty
 
 export type ChartMarker = { day: string; count: number; acknowledged: boolean };
 export type ChartPhase = { day: string; phase: string; confidence: string };
+export type ChartOverlay = { label: string; values: DayValue[] };
+export const overlayStyles = ["chart-overlay-1", "chart-overlay-2", "chart-overlay-3"] as const;
 export const cyclePhases = ["menstrual", "follicular", "ovulatory", "luteal"] as const;
 
 type Props = {
   values: DayValue[]; baseline?: DayValue[]; kind: ChartKind; label: string; unit: string;
   height?: number; animate?: boolean; sparkline?: boolean;
-  markers?: ChartMarker[]; onMarker?: (day: string) => void; onPick?: (day: string) => void; phases?: ChartPhase[];
+  markers?: ChartMarker[]; onMarker?: (day: string) => void; onPick?: (day: string) => void; phases?: ChartPhase[]; overlays?: ChartOverlay[];
 };
 
 /* Hatch patterns carry the cycle phase without a colour (§12 forbids any colour outside §4.2). */
@@ -27,7 +29,7 @@ export function PhaseSwatch({ phase }: { phase: string }) {
   return <svg className="phase-swatch" viewBox="0 0 14 10" aria-hidden="true"><PhasePatterns id={id} /><rect width="14" height="10" fill={`url(#${id}-${phase})`} /></svg>;
 }
 
-export function DataChart({ values, baseline, kind, label, unit, height = 160, animate = false, sparkline = false, markers = [], onMarker, onPick, phases }: Props) {
+export function DataChart({ values, baseline, kind, label, unit, height = 160, animate = false, sparkline = false, markers = [], onMarker, onPick, phases, overlays = [] }: Props) {
   const frame = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(320);
   const [drawing, setDrawing] = useState(animate);
@@ -41,7 +43,9 @@ export function DataChart({ values, baseline, kind, label, unit, height = 160, a
   useEffect(() => { if (!animate) return; const timer = setTimeout(() => setDrawing(false), 600); return () => clearTimeout(timer); }, [animate]);
   const compact = sparkline;
   const series = buildSeries(values, { kind, baseline, layout: { width, height, top: compact ? 4 : 14, bottom: compact ? 4 : 14, left: 4, right: compact ? 34 : 44 } });
-  const sentence = describeSeries(label, unit, series);
+  const layout = { width, height, top: compact ? 4 : 14, bottom: compact ? 4 : 14, left: 4, right: compact ? 34 : 44 };
+  const overlaySeries = overlays.slice(0, 3).map(o => buildSeries(o.values, { kind: "line", layout }));
+  const sentence = describeSeries(label, unit, series) + (overlays.length ? " Overlaid on its own scale: " + overlays.slice(0, 3).map(o => o.label).join(", ") + "." : "");
   const draw = drawing ? " chart-draw" : "";
   function pick(event: PointerEvent<SVGSVGElement>) {
     if (!onPick || (event.target as Element).closest("[data-testid=alert-marker]")) return;
@@ -64,6 +68,7 @@ export function DataChart({ values, baseline, kind, label, unit, height = 160, a
           {series.inside.map((d, i) => <path key={"in" + i} className={"chart-line-inside" + draw} pathLength={1} d={d} />)}
           {series.outside.map((d, i) => <path key={"out" + i} className={"chart-line-outside" + draw} pathLength={1} d={d} />)}
         </>}
+      {overlaySeries.map((o, i) => o.segments.map((d, j) => <path key={"ov" + i + "-" + j} className={"chart-overlay " + overlayStyles[i]} d={d} />))}
       {series.last && series.lastOutside && kind !== "bars" && <circle className="chart-end" cx={series.last.x} cy={series.last.y!} r={2.2} />}
       {series.last && <text className="chart-value" x={series.last.x + (kind === "bars" ? series.bars.at(-1)!.width / 2 + 4 : 5)} y={series.last.y! + 4}>{formatValue(series.last.value!)}</text>}
       {markers.map(m => <g key={m.day} data-testid="alert-marker" data-acknowledged={m.acknowledged} role="button" tabIndex={0} aria-label={"Alerts " + m.day + (m.acknowledged ? ", acknowledged" : "")} onClick={() => onMarker?.(m.day)} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onMarker?.(m.day); } }}>

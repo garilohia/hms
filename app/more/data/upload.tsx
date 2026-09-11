@@ -63,7 +63,7 @@ export function DataImport({ profiles, onBusyChange, onComplete }: { profiles: P
   }
   return <section className="stack">
     <label className="block">Profile<select aria-label="Profile" className="mt-1 w-full" disabled={busy} value={userId} onChange={e => { setUserId(e.target.value); setConsent(false); }}>
-      {profiles.map(p => <option key={p.id} value={p.id}>{p.name}{p.kind === "dependent" ? " · Dependent" : ""}</option>)}
+      {profiles.map(p => <option key={p.id} value={p.id}>{p.name}{p.kind === "dependent" ? " (dependent)" : ""}</option>)}
     </select></label>
     <label className="flex items-start gap-3"><input className="mt-1" type="checkbox" checked={consent} disabled={busy} onChange={e => setConsent(e.target.checked)} />
       <span>{selected?.kind === "dependent" ? "I give guardian consent to store and process this dependent’s health readings." : "I consent to HMS storing and processing my health readings."} Data is stored in Supabase in India. You can withdraw consent and delete data. This does not give a doctor access.</span>
@@ -86,7 +86,7 @@ export function DataImport({ profiles, onBusyChange, onComplete }: { profiles: P
     <p className="muted">Keep this tab open while importing. If interrupted, select the file again. Saved readings are not duplicated. Unsupported types or invalid rows are counted and skipped.</p>
     {progress && <div role="status" data-testid="import-progress" data-status={progress.status} data-inserted={progress.inserted} data-skipped={progress.skipped} data-file-count={progress.fileCount} data-skipped-files={progress.skippedFiles} className="panel stack">
       <p>{progress.status === "done" ? "Import complete" : progress.status === "working" ? "Importing" : "Import stopped"}</p>
-      {progress.fileCount && <p>{progress.fileName ? progress.fileName + " · " : ""}{progress.fileIndex?.toLocaleString()} of {progress.fileCount.toLocaleString()} files. {(progress.supportedFiles || 0).toLocaleString()} health files recognised; {(progress.skippedFiles || 0).toLocaleString()} nonmetric or unsupported files skipped.</p>}
+      {progress.fileCount && <p>{progress.fileName ? progress.fileName + ": " : ""}{progress.fileIndex?.toLocaleString()} of {progress.fileCount.toLocaleString()} files. {(progress.supportedFiles || 0).toLocaleString()} health files recognised; {(progress.skippedFiles || 0).toLocaleString()} nonmetric or unsupported files skipped.</p>}
       <progress className="w-full" max={Math.max(1, progress.totalBytes)} value={progress.bytes} />
       <p>{progress.records.toLocaleString()} records read. {progress.inserted.toLocaleString()} added. {progress.skipped.toLocaleString()} duplicates. {progress.unsupported.toLocaleString()} unsupported or invalid.</p>
     </div>}

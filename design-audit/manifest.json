@@ -1,5 +1,5 @@
 {
-  "captured_at": "2026-09-11T08:05:57.420Z",
+  "captured_at": "2026-09-11T08:56:33.560Z",
   "viewport_width": 390,
   "shots": [
     {
@@ -229,7 +229,7 @@
     {
       "name": "summary",
       "scheme": "light",
-      "route": "/summary?profile=28c6f521-50b5-46f8-ac76-9e8486022bf5",
+      "route": "/summary?profile=43973de7-baa1-4966-9c26-dd7aa8f24687",
       "scrollWidth": 390,
       "status": 200
     },
@@ -243,7 +243,7 @@
     {
       "name": "consult",
       "scheme": "light",
-      "route": "/consults/798109ed-1e11-4a5e-a678-b09be15c7d52",
+      "route": "/consults/d66d2f79-d981-4e97-9c5a-31076a44467c",
       "scrollWidth": 390,
       "status": 200
     },
@@ -362,7 +362,7 @@
     {
       "name": "summary",
       "scheme": "dark",
-      "route": "/summary?profile=28c6f521-50b5-46f8-ac76-9e8486022bf5",
+      "route": "/summary?profile=43973de7-baa1-4966-9c26-dd7aa8f24687",
       "scrollWidth": 390,
       "status": 200
     },
@@ -376,7 +376,7 @@
     {
       "name": "consult",
       "scheme": "dark",
-      "route": "/consults/798109ed-1e11-4a5e-a678-b09be15c7d52",
+      "route": "/consults/d66d2f79-d981-4e97-9c5a-31076a44467c",
       "scrollWidth": 390,
       "status": 200
     },
@@ -395,16 +395,93 @@
       "status": 200
     },
     {
+      "name": "today-simple",
+      "scheme": "light",
+      "route": "/today",
+      "scrollWidth": 390,
+      "status": 200
+    },
+    {
+      "name": "history-simple",
+      "scheme": "light",
+      "route": "/history",
+      "scrollWidth": 390,
+      "status": 200
+    },
+    {
+      "name": "today-simple",
+      "scheme": "dark",
+      "route": "/today",
+      "scrollWidth": 390,
+      "status": 200
+    },
+    {
+      "name": "history-simple",
+      "scheme": "dark",
+      "route": "/history",
+      "scrollWidth": 390,
+      "status": 200
+    },
+    {
+      "name": "today-advanced",
+      "scheme": "light",
+      "route": "/today",
+      "scrollWidth": 390,
+      "status": 200
+    },
+    {
+      "name": "history-advanced",
+      "scheme": "light",
+      "route": "/history",
+      "scrollWidth": 390,
+      "status": 200
+    },
+    {
+      "name": "today-advanced",
+      "scheme": "dark",
+      "route": "/today",
+      "scrollWidth": 390,
+      "status": 200
+    },
+    {
+      "name": "history-advanced",
+      "scheme": "dark",
+      "route": "/history",
+      "scrollWidth": 390,
+      "status": 200
+    },
+    {
+      "name": "today-200pct",
+      "scheme": "light",
+      "route": "/today at 200% text",
+      "scrollWidth": 390,
+      "status": 200
+    },
+    {
+      "name": "history-200pct",
+      "scheme": "light",
+      "route": "/history at 200% text",
+      "scrollWidth": 390,
+      "status": 200
+    },
+    {
+      "name": "more-200pct",
+      "scheme": "light",
+      "route": "/more at 200% text",
+      "scrollWidth": 390,
+      "status": 200
+    },
+    {
       "name": "caregiver-today",
       "scheme": "light",
-      "route": "/today?profile=28c6f521-50b5-46f8-ac76-9e8486022bf5",
+      "route": "/today?profile=43973de7-baa1-4966-9c26-dd7aa8f24687",
       "scrollWidth": 390,
       "status": 200
     },
     {
       "name": "caregiver-alerts",
       "scheme": "light",
-      "route": "/doctor/alerts?profile=28c6f521-50b5-46f8-ac76-9e8486022bf5",
+      "route": "/doctor/alerts?profile=43973de7-baa1-4966-9c26-dd7aa8f24687",
       "scrollWidth": 390,
       "status": 200
     },
@@ -418,14 +495,14 @@
     {
       "name": "caregiver-today",
       "scheme": "dark",
-      "route": "/today?profile=28c6f521-50b5-46f8-ac76-9e8486022bf5",
+      "route": "/today?profile=43973de7-baa1-4966-9c26-dd7aa8f24687",
       "scrollWidth": 390,
       "status": 200
     },
     {
       "name": "caregiver-alerts",
       "scheme": "dark",
-      "route": "/doctor/alerts?profile=28c6f521-50b5-46f8-ac76-9e8486022bf5",
+      "route": "/doctor/alerts?profile=43973de7-baa1-4966-9c26-dd7aa8f24687",
       "scrollWidth": 390,
       "status": 200
     },

@@ -62,7 +62,7 @@ for(const path of [3,4])test(path===3?"golden 3: summary-only doctor, real PDF a
       await expect(page.getByRole("status")).toContainText("Failed to fetch");await section.getByRole("button",{name:"Request review",exact:true}).click();
       await expect(page).toHaveURL(/\/consults\/[a-f0-9-]+$/);const consultUrl=page.url();
       expect((await db.unsafe("select count(*)::int n from public.consults where patient_id=$1",[patient.subject]))[0].n).toBe(1);
-      await doctorPage.goto(baseURL+"/doctor");await expect(doctorPage.getByRole("link",{name:label+" patient · trend review · requested",exact:true})).toBeVisible();await doctorPage.goto(consultUrl);
+      await doctorPage.goto(baseURL+"/doctor");await expect(doctorPage.getByRole("link",{name:label+" patient, trend review, requested",exact:true})).toBeVisible();await doctorPage.goto(consultUrl);
       await doctorPage.getByRole("button",{name:"Accept consult",exact:true}).click();await expect(doctorPage.getByLabel("Message",{exact:true})).toBeVisible();
       // Match the persisted message bubble, not the same text still in the composer.
       await loseFirstSavedResponse(doctorPage,"message");

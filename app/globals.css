@@ -197,6 +197,20 @@ input:not([type=checkbox]):not([type=radio]), select, textarea { background: var
 input[type=checkbox] { width: 1.2rem; height: 1.2rem; border-radius: 6px; accent-color: var(--accent); flex-shrink: 0; }
 input[type=date], input[type=file] { min-width: 0; width: 100%; }
 
+/* Density (DESIGN.md §9). One system, three densities. */
+.app-frame[data-mode=simple] { --text-body: 19px; --text-label: 17px; --text-axis: 15px; }
+.app-frame[data-mode=simple] .button, .app-frame[data-mode=simple] .chips button, .app-frame[data-mode=simple] .main-tabs a, .app-frame[data-mode=simple] input:not([type=checkbox]):not([type=radio]), .app-frame[data-mode=simple] select { min-height: 48px; }
+.app-frame[data-mode=simple] .main-tabs a { min-height: 52px; }
+.app-frame[data-mode=advanced] { --space-card: 12px; --text-axis: 15px; --text-label: 15px; }
+.app-frame[data-mode=advanced] .card { padding: 12px; }
+.raw-table-wrap { overflow-x: auto; }
+.raw-table { border-collapse: collapse; width: 100%; font-size: var(--text-label); }
+.raw-table th, .raw-table td { border-bottom: 1px solid var(--rule); padding: 6px 8px; text-align: left; white-space: nowrap; }
+.raw-table th { color: var(--ink-soft); font-weight: 600; }
+.mode-option { display: flex; gap: 12px; align-items: flex-start; padding: 12px; border: 1px solid var(--rule); border-radius: var(--radius-button); }
+.mode-option input { margin-top: 4px; }
+.mode-option strong { display: block; font-weight: 600; }
+
 /* ------------------------------------------------------------------ */
 /* Frame */
 /* ------------------------------------------------------------------ */
@@ -310,6 +324,11 @@ progress { accent-color: var(--accent); }
 .data-chart .chart-line-inside { fill: none; stroke: var(--data); stroke-width: 1.5; stroke-linejoin: round; stroke-linecap: butt; }
 .data-chart .chart-line-outside { fill: none; stroke: var(--ink); stroke-width: 2; stroke-linejoin: round; stroke-linecap: butt; }
 .data-chart .chart-end { fill: var(--ink); }
+/* Advanced overlays: same --data ink, told apart by weight and dash, never by a new colour. */
+.data-chart .chart-overlay { fill: none; stroke: var(--data); stroke-linejoin: round; opacity: .9; }
+.data-chart .chart-overlay-1 { stroke-width: 1; stroke-dasharray: 4 3; }
+.data-chart .chart-overlay-2 { stroke-width: 1; stroke-dasharray: 1.5 2.5; }
+.data-chart .chart-overlay-3 { stroke-width: 2.5; opacity: .45; }
 .data-chart .chart-bar { fill: var(--data); opacity: .85; }
 .data-chart .chart-bar.latest { opacity: 1; }
 .data-chart .chart-notch { stroke: var(--urgent); stroke-width: 2; cursor: pointer; }

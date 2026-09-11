@@ -1,6 +1,6 @@
 import { describe,expect,it } from "vitest";
 import { buildSeries,chartMetrics,chartSeries,describeSeries,rollingBand } from "../src/lib/patient/chart";
-import { summarySchema,viewInput } from "../src/lib/patient/model";
+import { profileSchema,summarySchema,viewInput } from "../src/lib/patient/model";
 import { dailySummary } from "../src/lib/analytics/daily";
 const row=(day:string,rhr:number|null)=>summarySchema.parse({...dailySummary([],{day,timezone:"UTC"}),rhr,recovery_evidence:{}});
 describe("patient display boundaries",()=>{
@@ -38,6 +38,11 @@ describe("patient display boundaries",()=>{
   it("renders bars from zero with the most recent bar marked",()=>{
     const series=buildSeries([{day:"2026-08-01",value:400},{day:"2026-08-02",value:null},{day:"2026-08-03",value:420}],{kind:"bars"});
     expect(series.low).toBe(0);expect(series.bars).toHaveLength(2);expect(series.bars.at(-1)?.latest).toBe(true);expect(series.bars[0].latest).toBe(false);
+  });
+  it("defaults the display density to standard and accepts only the three densities",()=>{
+    const base={id:"7f1e6c1a-1c7b-4b5e-9a0e-2a2b3c4d5e6f",name:"A",dob:"1990-01-01",kind:"self",timezone:"UTC",sex_at_birth:null,country_of_residence:"IN",onboarding_completed_at:null,cycle_tracking_enabled:false};
+    expect(profileSchema.parse(base).display_mode).toBe("standard");expect(profileSchema.parse({...base,display_mode:"simple"}).display_mode).toBe("simple");
+    expect(profileSchema.safeParse({...base,display_mode:"dense"}).success).toBe(false);
   });
   it("labels temperature as deviation and BP as systolic, preserving units",()=>{
     expect(chartMetrics.Temp.unit).toBe("°C from baseline");expect(chartMetrics.BP.unit).toContain("systolic");expect(chartMetrics.Sleep.unit).toBe("min");

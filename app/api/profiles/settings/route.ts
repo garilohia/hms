@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { authenticatedClient,sameOrigin } from "@/src/lib/auth/server";
 import { boundedJson } from "@/src/lib/ingestion/http";
-const schema=z.object({userId:z.uuid(),action:z.enum(["identity","complete","cycle","period"]),payload:z.record(z.string(),z.unknown())});
+const schema=z.object({userId:z.uuid(),action:z.enum(["identity","complete","cycle","period","display"]),payload:z.record(z.string(),z.unknown())});
 export async function POST(request:Request) {
   if(!sameOrigin(request)) return Response.json({error:"Request origin rejected."},{status:403});
   const session=await authenticatedClient();
