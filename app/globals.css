@@ -244,6 +244,11 @@ input[type=date], input[type=file] { min-width: 0; width: 100%; }
 .button.secondary { color: var(--accent); border: 1px solid var(--rule); background: var(--surface); }
 .button:disabled { opacity: .5; }
 
+.metric-card { display: flex; flex-direction: column; gap: 8px; }
+.metric-label { display: flex; align-items: center; gap: 6px; color: var(--ink-soft); font-size: var(--text-label); font-weight: 500; }
+.metric-label svg { width: 15px; height: 15px; flex: none; }
+.metric-sentence { margin-bottom: 4px; }
+.hero-score small { font-size: .5em; }
 /* Hero number: Source Serif 4 at hero size, unit in --ink-soft. */
 .hero-figure { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin: 8px 0 4px; }
 .hero-score { font-family: var(--font-serif); font-weight: 400; font-size: var(--text-hero); letter-spacing: -0.02em; line-height: 1; }
@@ -302,9 +307,10 @@ progress { accent-color: var(--accent); }
 .data-chart .chart-bar { fill: var(--data); opacity: .85; }
 .data-chart .chart-bar.latest { opacity: 1; }
 .data-chart .chart-notch { stroke: var(--urgent); stroke-width: 2; cursor: pointer; }
-.data-chart .chart-phase { fill: var(--ink-soft); opacity: .55; }
-.data-chart .chart-phase-stroke, .phase-swatch .chart-phase-stroke { stroke: var(--ink-soft); stroke-width: 1; opacity: .55; }
-.phase-swatch .chart-phase { fill: var(--ink-soft); opacity: .55; }
+.data-chart .chart-phase { fill: var(--ink-soft); opacity: .3; }
+.data-chart .chart-phase-stroke { stroke: var(--ink-soft); stroke-width: 1; opacity: .3; }
+.phase-swatch .chart-phase-stroke { stroke: var(--ink-soft); stroke-width: 1; opacity: .6; }
+.phase-swatch .chart-phase { fill: var(--ink-soft); opacity: .6; }
 .chart-axis { display: flex; justify-content: space-between; gap: 12px; color: var(--ink-soft); font-size: var(--text-axis); margin-top: 6px; }
 .chart-building { display: flex; justify-content: space-between; align-items: center; gap: 12px; color: var(--ink-soft); font-size: var(--text-axis); margin-top: 8px; }
 .chart-building b { font-weight: 500; color: var(--ink); }

@@ -44,6 +44,8 @@ More → Family holds caregiver account-code invitations, acceptance, scope chan
 
 Clinical summaries support 30/90-day aggregates, immutable saved snapshots and private one-page PDF downloads. Every shared read checks current access and writes an audit row. Downloaded files cannot be remotely revoked. PDFs include up to six complete medication entries and six recent document titles, with counts directing readers to remaining entries in the app. Embedded fonts support Latin and Devanagari; unsupported characters produce a clear error instead of silently missing text. See OQ006.
 
+`HMS_TEST_PORT=3101 npm run design:audit` captures every route at 390 px in light and dark mode into `design-audit/` for the DESIGN.md §13 walk recorded in `DESIGN_AUDIT.md`.
+
 `npm run pdf:verify` renders the three seeded personas plus guardian, long-entry and multilingual stress fixtures under `test-results/clinical-pdf/`. It requires Poppler's `pdfinfo`, `pdftotext` and `pdftoppm` on PATH, or `HMS_PDFINFO`, `HMS_PDFTOTEXT` and `HMS_PDFTOPPM` overrides. Inspect the resulting PNGs after layout changes. The production route uses the same renderer and bundled fonts; it needs no Poppler or external font service.
 
 PWA verification uses current Chrome installability errors, the actual manifest/192- and 512-px PNG icons, and the active worker. Lighthouse's PWA category is deprecated; see D010. Chrome's install menu or Safari's Share → Add to Home Screen installs the app. It still needs a connection.

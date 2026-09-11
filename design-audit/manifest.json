@@ -1,0 +1,470 @@
+{
+  "captured_at": "2026-09-11T08:05:57.420Z",
+  "viewport_width": 390,
+  "shots": [
+    {
+      "name": "home",
+      "scheme": "light",
+      "route": "/",
+      "scrollWidth": 390,
+      "status": 200
+    },
+    {
+      "name": "sign-in",
+      "scheme": "light",
+      "route": "/sign-in",
+      "scrollWidth": 390,
+      "status": 200
+    },
+    {
+      "name": "legal-privacy",
+      "scheme": "light",
+      "route": "/legal/privacy",
+      "scrollWidth": 390,
+      "status": 200
+    },
+    {
+      "name": "legal-terms",
+      "scheme": "light",
+      "route": "/legal/terms",
+      "scrollWidth": 390,
+      "status": 200
+    },
+    {
+      "name": "legal-disclaimer",
+      "scheme": "light",
+      "route": "/legal/disclaimer",
+      "scrollWidth": 390,
+      "status": 200
+    },
+    {
+      "name": "home",
+      "scheme": "dark",
+      "route": "/",
+      "scrollWidth": 390,
+      "status": 200
+    },
+    {
+      "name": "sign-in",
+      "scheme": "dark",
+      "route": "/sign-in",
+      "scrollWidth": 390,
+      "status": 200
+    },
+    {
+      "name": "legal-privacy",
+      "scheme": "dark",
+      "route": "/legal/privacy",
+      "scrollWidth": 390,
+      "status": 200
+    },
+    {
+      "name": "legal-terms",
+      "scheme": "dark",
+      "route": "/legal/terms",
+      "scrollWidth": 390,
+      "status": 200
+    },
+    {
+      "name": "legal-disclaimer",
+      "scheme": "dark",
+      "route": "/legal/disclaimer",
+      "scrollWidth": 390,
+      "status": 200
+    },
+    {
+      "name": "onboarding-1",
+      "scheme": "light",
+      "route": "/onboarding",
+      "scrollWidth": 390,
+      "status": 200
+    },
+    {
+      "name": "onboarding-2",
+      "scheme": "light",
+      "route": "/onboarding",
+      "scrollWidth": 390,
+      "status": 200
+    },
+    {
+      "name": "onboarding-3",
+      "scheme": "light",
+      "route": "/onboarding",
+      "scrollWidth": 390,
+      "status": 200
+    },
+    {
+      "name": "onboarding-4",
+      "scheme": "light",
+      "route": "/onboarding",
+      "scrollWidth": 390,
+      "status": 200
+    },
+    {
+      "name": "onboarding-1",
+      "scheme": "dark",
+      "route": "/onboarding",
+      "scrollWidth": 390,
+      "status": 200
+    },
+    {
+      "name": "onboarding-2",
+      "scheme": "dark",
+      "route": "/onboarding",
+      "scrollWidth": 390,
+      "status": 200
+    },
+    {
+      "name": "onboarding-3",
+      "scheme": "dark",
+      "route": "/onboarding",
+      "scrollWidth": 390,
+      "status": 200
+    },
+    {
+      "name": "onboarding-4",
+      "scheme": "dark",
+      "route": "/onboarding",
+      "scrollWidth": 390,
+      "status": 200
+    },
+    {
+      "name": "today",
+      "scheme": "light",
+      "route": "/today",
+      "scrollWidth": 390,
+      "status": 200
+    },
+    {
+      "name": "doctors",
+      "scheme": "light",
+      "route": "/doctors",
+      "scrollWidth": 390,
+      "status": 200
+    },
+    {
+      "name": "history",
+      "scheme": "light",
+      "route": "/history",
+      "scrollWidth": 390,
+      "status": 200
+    },
+    {
+      "name": "more",
+      "scheme": "light",
+      "route": "/more",
+      "scrollWidth": 390,
+      "status": 200
+    },
+    {
+      "name": "more-data",
+      "scheme": "light",
+      "route": "/more/data",
+      "scrollWidth": 390,
+      "status": 200
+    },
+    {
+      "name": "more-devices",
+      "scheme": "light",
+      "route": "/more/devices",
+      "scrollWidth": 390,
+      "status": 200
+    },
+    {
+      "name": "more-alerts",
+      "scheme": "light",
+      "route": "/more/alerts",
+      "scrollWidth": 390,
+      "status": 200
+    },
+    {
+      "name": "more-cycle",
+      "scheme": "light",
+      "route": "/more/cycle",
+      "scrollWidth": 390,
+      "status": 200
+    },
+    {
+      "name": "more-pharmacy",
+      "scheme": "light",
+      "route": "/more/pharmacy",
+      "scrollWidth": 390,
+      "status": 200
+    },
+    {
+      "name": "more-family",
+      "scheme": "light",
+      "route": "/more/family",
+      "scrollWidth": 390,
+      "status": 200
+    },
+    {
+      "name": "more-advanced",
+      "scheme": "light",
+      "route": "/more/advanced",
+      "scrollWidth": 390,
+      "status": 200
+    },
+    {
+      "name": "more-advanced-latency",
+      "scheme": "light",
+      "route": "/more/advanced/latency",
+      "scrollWidth": 390,
+      "status": 200
+    },
+    {
+      "name": "account",
+      "scheme": "light",
+      "route": "/account",
+      "scrollWidth": 390,
+      "status": 200
+    },
+    {
+      "name": "account-delete",
+      "scheme": "light",
+      "route": "/account/delete",
+      "scrollWidth": 390,
+      "status": 200
+    },
+    {
+      "name": "summary",
+      "scheme": "light",
+      "route": "/summary?profile=28c6f521-50b5-46f8-ac76-9e8486022bf5",
+      "scrollWidth": 390,
+      "status": 200
+    },
+    {
+      "name": "doctor",
+      "scheme": "light",
+      "route": "/doctor",
+      "scrollWidth": 390,
+      "status": 200
+    },
+    {
+      "name": "consult",
+      "scheme": "light",
+      "route": "/consults/798109ed-1e11-4a5e-a678-b09be15c7d52",
+      "scrollWidth": 390,
+      "status": 200
+    },
+    {
+      "name": "history-sleep",
+      "scheme": "light",
+      "route": "/history (Sleep)",
+      "scrollWidth": 390,
+      "status": 200
+    },
+    {
+      "name": "history-7days",
+      "scheme": "light",
+      "route": "/history (7 days)",
+      "scrollWidth": 390,
+      "status": 200
+    },
+    {
+      "name": "today",
+      "scheme": "dark",
+      "route": "/today",
+      "scrollWidth": 390,
+      "status": 200
+    },
+    {
+      "name": "doctors",
+      "scheme": "dark",
+      "route": "/doctors",
+      "scrollWidth": 390,
+      "status": 200
+    },
+    {
+      "name": "history",
+      "scheme": "dark",
+      "route": "/history",
+      "scrollWidth": 390,
+      "status": 200
+    },
+    {
+      "name": "more",
+      "scheme": "dark",
+      "route": "/more",
+      "scrollWidth": 390,
+      "status": 200
+    },
+    {
+      "name": "more-data",
+      "scheme": "dark",
+      "route": "/more/data",
+      "scrollWidth": 390,
+      "status": 200
+    },
+    {
+      "name": "more-devices",
+      "scheme": "dark",
+      "route": "/more/devices",
+      "scrollWidth": 390,
+      "status": 200
+    },
+    {
+      "name": "more-alerts",
+      "scheme": "dark",
+      "route": "/more/alerts",
+      "scrollWidth": 390,
+      "status": 200
+    },
+    {
+      "name": "more-cycle",
+      "scheme": "dark",
+      "route": "/more/cycle",
+      "scrollWidth": 390,
+      "status": 200
+    },
+    {
+      "name": "more-pharmacy",
+      "scheme": "dark",
+      "route": "/more/pharmacy",
+      "scrollWidth": 390,
+      "status": 200
+    },
+    {
+      "name": "more-family",
+      "scheme": "dark",
+      "route": "/more/family",
+      "scrollWidth": 390,
+      "status": 200
+    },
+    {
+      "name": "more-advanced",
+      "scheme": "dark",
+      "route": "/more/advanced",
+      "scrollWidth": 390,
+      "status": 200
+    },
+    {
+      "name": "more-advanced-latency",
+      "scheme": "dark",
+      "route": "/more/advanced/latency",
+      "scrollWidth": 390,
+      "status": 200
+    },
+    {
+      "name": "account",
+      "scheme": "dark",
+      "route": "/account",
+      "scrollWidth": 390,
+      "status": 200
+    },
+    {
+      "name": "account-delete",
+      "scheme": "dark",
+      "route": "/account/delete",
+      "scrollWidth": 390,
+      "status": 200
+    },
+    {
+      "name": "summary",
+      "scheme": "dark",
+      "route": "/summary?profile=28c6f521-50b5-46f8-ac76-9e8486022bf5",
+      "scrollWidth": 390,
+      "status": 200
+    },
+    {
+      "name": "doctor",
+      "scheme": "dark",
+      "route": "/doctor",
+      "scrollWidth": 390,
+      "status": 200
+    },
+    {
+      "name": "consult",
+      "scheme": "dark",
+      "route": "/consults/798109ed-1e11-4a5e-a678-b09be15c7d52",
+      "scrollWidth": 390,
+      "status": 200
+    },
+    {
+      "name": "history-sleep",
+      "scheme": "dark",
+      "route": "/history (Sleep)",
+      "scrollWidth": 390,
+      "status": 200
+    },
+    {
+      "name": "history-7days",
+      "scheme": "dark",
+      "route": "/history (7 days)",
+      "scrollWidth": 390,
+      "status": 200
+    },
+    {
+      "name": "caregiver-today",
+      "scheme": "light",
+      "route": "/today?profile=28c6f521-50b5-46f8-ac76-9e8486022bf5",
+      "scrollWidth": 390,
+      "status": 200
+    },
+    {
+      "name": "caregiver-alerts",
+      "scheme": "light",
+      "route": "/doctor/alerts?profile=28c6f521-50b5-46f8-ac76-9e8486022bf5",
+      "scrollWidth": 390,
+      "status": 200
+    },
+    {
+      "name": "caregiver-family",
+      "scheme": "light",
+      "route": "/more/family",
+      "scrollWidth": 390,
+      "status": 200
+    },
+    {
+      "name": "caregiver-today",
+      "scheme": "dark",
+      "route": "/today?profile=28c6f521-50b5-46f8-ac76-9e8486022bf5",
+      "scrollWidth": 390,
+      "status": 200
+    },
+    {
+      "name": "caregiver-alerts",
+      "scheme": "dark",
+      "route": "/doctor/alerts?profile=28c6f521-50b5-46f8-ac76-9e8486022bf5",
+      "scrollWidth": 390,
+      "status": 200
+    },
+    {
+      "name": "caregiver-family",
+      "scheme": "dark",
+      "route": "/more/family",
+      "scrollWidth": 390,
+      "status": 200
+    },
+    {
+      "name": "history-temp",
+      "scheme": "light",
+      "route": "/history (Temp, cycle shading)",
+      "scrollWidth": 390,
+      "status": 200
+    },
+    {
+      "name": "today-readiness",
+      "scheme": "light",
+      "route": "/today",
+      "scrollWidth": 390,
+      "status": 200
+    },
+    {
+      "name": "history-temp",
+      "scheme": "dark",
+      "route": "/history (Temp, cycle shading)",
+      "scrollWidth": 390,
+      "status": 200
+    },
+    {
+      "name": "today-readiness",
+      "scheme": "dark",
+      "route": "/today",
+      "scrollWidth": 390,
+      "status": 200
+    }
+  ],
+  "pageErrors": [],
+  "notes": []
+}

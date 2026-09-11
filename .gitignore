@@ -43,3 +43,6 @@ next-env.d.ts
 .vitest/
 test-results/
 playwright-report/
+
+# Design audit screenshots (46 MB of PNGs); the manifest stays tracked
+design-audit/*.png

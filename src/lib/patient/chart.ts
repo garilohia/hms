@@ -29,7 +29,7 @@ export function formatDay(day: string): string {
 }
 export function formatValue(value: number): string {
   const rounded = Math.abs(value) >= 100 ? Math.round(value) : Math.round(value * 10) / 10;
-  return rounded.toLocaleString("en-GB", { maximumFractionDigits: 1 });
+  return (Object.is(rounded, -0) ? 0 : rounded).toLocaleString("en-GB", { maximumFractionDigits: 1 });
 }
 
 /** Band for one day from the values in the 28-day window ending on that day. Null until seven days exist. */

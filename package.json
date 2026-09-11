@@ -31,7 +31,8 @@
     "storage:setup": "tsx scripts/setup-storage.ts",
     "alerts:verify": "playwright test --config playwright.alerts.config.ts",
     "golden:verify": "playwright test --config playwright.golden.config.ts",
-    "pdf:verify": "tsx scripts/verify-clinical-pdf.ts"
+    "pdf:verify": "tsx scripts/verify-clinical-pdf.ts",
+    "design:audit": "playwright test --config playwright.design.config.ts"
   },
   "dependencies": {
     "@next/env": "16.3.4",
