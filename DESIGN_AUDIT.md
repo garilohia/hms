@@ -71,4 +71,4 @@ The ten §13 questions were asked of each screenshot. Items that pass on every r
 ## Still open
 
 - Summary sparklines omit axis labels by design; History carries the full chart.
-- The doctor's shared alert list uses plain cards rather than the §6 rule; a one-line change if wanted.
+- Resolved 11 September 2026: the doctor's shared alert list now uses the §6 rule and label, matching Today.

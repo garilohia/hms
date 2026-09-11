@@ -281,6 +281,13 @@
       "when": 1789200120000,
       "tag": "0039_snapshot_timezone",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1789200180000,
+      "tag": "0040_consult_live_messages",
+      "breakpoints": true
     }
   ]
 }

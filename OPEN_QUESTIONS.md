@@ -76,3 +76,11 @@
 
 - Resolved 11 September 2026. The founder preferred the reference HTML's dark `--urgent` `#F0554F`, but it measures 4.34:1 on dark `--surface-2`, below the 4.5:1 floor in §4.5 and §10, so `scripts/check-contrast.ts` rejects it. DESIGN.md's `#F4655E` (4.87:1 on surface-2) stays, and the repository copy of DESIGN.md is the source; the reference file should be updated to match.
 - Resolved 11 September 2026: the founder asked for the three densities. `profiles.display_mode` (migration 0035), the `display` settings action, the onboarding choice, More → Display and the Simple and Advanced renderings of Today and History are built (D031).
+
+## OQ015 — Realtime delivery is unverified in this environment
+
+- The consultation thread now has a live channel: `hms_private.can_receive_consult_live` mirrors the participant rule `hms_private.consult_read` enforces, a `realtime.messages` SELECT policy scopes the `consult:<uuid>` topic, and triggers on `public.messages` and `public.consults` broadcast a `changed` ping carrying no clinical text (migration 0040). All of it is installed and verified present in the database, and the payload deliberately forces a re-read so authorisation and consent are re-checked.
+- The websocket ping did not reach the browser in the golden run on 11 September 2026. The database side checks out: RLS is enabled on `realtime.messages`, `authenticated` holds SELECT, the policy and both triggers exist, every function in the path is STABLE and granted, and `setAuth()` with no argument is correct for supabase-js 2.116.0. The cause is therefore above the database and was not isolated within the time box.
+- This is not new to the chat. The patient view's `useRealtimePatientView` has used the same mechanism since migration 0024 and no test has ever asserted that it connects; both surfaces announce only an interrupted connection, so a permanently offline channel is invisible. Treat live delivery on Today, History and the consult thread as unverified until one test asserts it.
+- The consult room therefore keeps its explicit Refresh messages button unconditionally, so chat never depends on the channel. Before launch, confirm Realtime is enabled for the project, watch the websocket handshake in a browser, and add a golden assertion that a message sent by one participant appears for the other without a refresh.
+
