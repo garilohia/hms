@@ -13,8 +13,10 @@
 ## OQ002 — Hosted CI result still unobserved
 
 - Resolved in part: the checkout now has a Git remote, `origin` → `https://github.com/garilohia/hms.git`, and `big-changes` tracks it. The earlier statement that no remote was configured is superseded.
-- Still open: no hosted GitHub Actions result has been observed. The M0 workflow is configured for pushes and pull requests and its quality commands pass locally; local success is not a hosted-CI result.
-- Found 15 September 2026: the `database` job could not have passed since migration 0024. It replays every migration into a stock `postgres:17` service, and 0024, 0026 and 0040 attach broadcast policies to `realtime.messages` and call `realtime.send`/`realtime.topic`, none of which exist outside Supabase. `scripts/bootstrap-test-db.sql` now stubs that schema the same way it already stubs `auth` and `storage`. The stub is unverified locally: this machine has no Docker and no local Postgres, so the hosted run is itself the verification.
+- Corrected 15 September 2026: hosted runs do exist and this entry's earlier claim that none had been observed was wrong. Quality #1-#3 (8-9 September, commits 5038da6, 1e82567, 44c8589) passed. Every run from #4 onward has failed.
+- Cause, corroborated by the run history: the first failure is #4 on 10 September, the commit that added `0024_live_health.sql` and with it the first `realtime.messages` reference. The `database` job replays every migration into a stock `postgres:17` service, and 0024, 0026 and 0040 attach broadcast policies to `realtime.messages` and call `realtime.send`/`realtime.topic`, none of which exist outside Supabase. Runs before 0024 are green and every run after it is red, including commits that touch no database code, which is the signature of a failure during migration replay.
+- `scripts/bootstrap-test-db.sql` now stubs that schema the same way it already stubs `auth` and `storage` (commit a0f1803, run #9). The stub is unverified locally: this machine has no Docker and no local Postgres, so the hosted run is itself the verification.
+- Not yet confirmed: which job fails in each red run. If `quality` is also failing, the realtime stub fixes only half of it. Open run #8 and check whether the red is `database`, `quality`, or both.
 - As of 11 September 2026, local `main` is one commit ahead of `origin/main`. That commit is already contained in `origin/big-changes`, so nothing is unbacked.
 
 ## OQ003 — Launch email delivery and redirect configuration
