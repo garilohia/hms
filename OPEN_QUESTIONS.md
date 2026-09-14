@@ -14,6 +14,7 @@
 
 - Resolved in part: the checkout now has a Git remote, `origin` → `https://github.com/garilohia/hms.git`, and `big-changes` tracks it. The earlier statement that no remote was configured is superseded.
 - Still open: no hosted GitHub Actions result has been observed. The M0 workflow is configured for pushes and pull requests and its quality commands pass locally; local success is not a hosted-CI result.
+- Found 15 September 2026: the `database` job could not have passed since migration 0024. It replays every migration into a stock `postgres:17` service, and 0024, 0026 and 0040 attach broadcast policies to `realtime.messages` and call `realtime.send`/`realtime.topic`, none of which exist outside Supabase. `scripts/bootstrap-test-db.sql` now stubs that schema the same way it already stubs `auth` and `storage`. The stub is unverified locally: this machine has no Docker and no local Postgres, so the hosted run is itself the verification.
 - As of 11 September 2026, local `main` is one commit ahead of `origin/main`. That commit is already contained in `origin/big-changes`, so nothing is unbacked.
 
 ## OQ003 — Launch email delivery and redirect configuration
