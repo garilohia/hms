@@ -53,7 +53,8 @@ Never use a flat ground colour. Never add a second gradient anywhere.
 --accent             #57B394     #1E6B55     INTERACTION ONLY: buttons, links, active tab, focus ring
 --on-accent          #0D1A15     #FFFFFF     text on a filled accent button
 --data               #D4C4A0     #8A7A52     DATA ONLY: the chart line and bars while inside the band
---urgent             #F4655E     #C8262C     STATE ONLY: the urgent alert label and rule
+--urgent             #F0554F     #C8262C     STATE ONLY: the urgent alert label and rule.
+                                                 Never on --surface-2 (see §4.5).
 ```
 
 ### 4.3 The two-role accent rule
@@ -86,8 +87,7 @@ ink-soft on surface-2      5.53      5.32     4.5
 ink-soft on band           5.69      5.14     4.5
 accent on surface          6.59      6.38     4.5
 on-accent on accent        7.04      6.38     4.5
-urgent on surface          5.47      5.57     4.5
-urgent on surface-2        4.87      4.90     4.5
+urgent on surface          4.87      5.57     4.5
 data on band (graphic)     8.90      3.57     3.0
 data on surface (graphic)  9.71      4.21     3.0
 ```

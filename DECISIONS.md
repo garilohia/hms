@@ -262,3 +262,15 @@ The alert list now renders the §6 card: the 2px top rule, the icon and the bold
 Chat reuses the mechanism the patient view has used since migration 0024. Migration 0040 adds `hms_private.can_receive_consult_live`, whose participant rule is exactly the one `hms_private.consult_read` already enforces, a `realtime.messages` policy scoped to the `consult:<uuid>` topic, and triggers on `public.messages` and `public.consults`. The broadcast carries only a `changed` ping: no clinical text crosses the channel, and the client re-reads the thread through `hms_consult_read`, so participation and consent are re-checked on every refresh rather than trusted from the socket.
 
 The live ping did not reach the browser in the golden run and the cause was not isolated inside the time box, so the explicit Refresh messages button stays unconditional rather than appearing only when the channel reports itself offline. Chat is therefore never worse than before, and the golden path continues to assert the refresh-based flow, which is the behaviour that is actually guaranteed. The unverified delivery — which equally affects the pre-existing patient view channel — is OQ015.
+
+## D034 — Dark urgent is #F0554F; the contrast floor is unchanged
+
+On 14 September 2026 the founder chose the reference HTML's dark `--urgent` `#F0554F`, closing the colour half of OQ014. It measures 4.87:1 on dark `--surface` and 4.34:1 on dark `--surface-2`. The 4.5:1 floor in §4.5 and §10 is not lowered. `--urgent` renders in exactly two places — the alert card's 2px top rule and its label, and the chart notch — and both sit on `--surface`, so the pairing that fails is one the product never draws.
+
+`scripts/check-contrast.ts` therefore drops the vacuous `urgent on surface-2` row and gains a structural guard: it parses `app/globals.css` for rules whose background is `var(--surface-2)` and fails the build if any of them, or anything scoped under them, sets `color: var(--urgent)`. The guard was verified by injecting a violating rule and confirming a non-zero exit, then removing it. This keeps the rule enforced by the build rather than by a comment.
+
+Darkening `--surface-2` so the old pair would pass was rejected. `#2A231D` reaches 4.51:1 against urgent but drops `--surface-2` to `--surface` separation from 1.12:1 to 1.08:1, which erases the nested panel that §9's Advanced density depends on.
+
+## D035 — Scope confirmations: PDF scripts, caregiver invitations
+
+On 14 September 2026 the founder confirmed two limits as deliberate rather than outstanding work. Clinical PDFs stay on Latin and Devanagari; unsupported scripts keep returning the explicit PDF-unavailable response with the complete HTML summary intact (OQ006). Caregiver invitations stay as account codes rather than delivered invitation emails at launch.

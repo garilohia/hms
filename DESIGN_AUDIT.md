@@ -62,7 +62,7 @@ The ten §13 questions were asked of each screenshot. Items that pass on every r
 ## Items settled with the founder on 11 September 2026
 
 1. Hatching is the cycle-phase treatment (OQ013 resolved).
-2. The reference HTML's dark urgent red fails the contrast floor on `--surface-2`, so DESIGN.md's `#F4655E` stays (OQ014).
+2. Superseded 14 September 2026: the founder chose the reference HTML's `#F0554F` (D034). Urgent only ever renders on `--surface`, where it clears 4.5:1, and the build now fails if it is ever placed on `--surface-2`.
 3. The three densities now exist (D031).
 4. Middle-dot meta strings are rewritten (D031).
 5. The "Live updates connected" line is gone (D031).

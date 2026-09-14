@@ -16,8 +16,7 @@ const pairs: Pair[] = [
   { label: "ink-soft on band", foreground: "inkSoft", background: "band", requirement: 4.5, documented: { dark: 5.69, light: 5.14 } },
   { label: "accent on surface", foreground: "accent", background: "surface", requirement: 4.5, documented: { dark: 6.59, light: 6.38 } },
   { label: "on-accent on accent", foreground: "onAccent", background: "accent", requirement: 4.5, documented: { dark: 7.04, light: 6.38 } },
-  { label: "urgent on surface", foreground: "urgent", background: "surface", requirement: 4.5, documented: { dark: 5.47, light: 5.57 } },
-  { label: "urgent on surface-2", foreground: "urgent", background: "surface2", requirement: 4.5, documented: { dark: 4.87, light: 4.90 } },
+  { label: "urgent on surface", foreground: "urgent", background: "surface", requirement: 4.5, documented: { dark: 4.87, light: 5.57 } },
   { label: "data on band (graphic)", foreground: "data", background: "band", requirement: 3.0, documented: { dark: 8.90, light: 3.57 } },
   { label: "data on surface (graphic)", foreground: "data", background: "surface", requirement: 3.0, documented: { dark: 9.71, light: 4.21 } },
 ];
@@ -67,6 +66,18 @@ for (const mode of ["dark", "light"] as const) {
     if (Math.abs(ratio - pair.documented[mode]) > 0.05) drift.push(`${mode}: ${pair.label} computed ${ratio.toFixed(2)} but DESIGN.md documents ${pair.documented[mode].toFixed(2)}`);
   }
 }
+// The founder chose the dark urgent #F0554F (D034). It clears 4.5:1 on --surface, where
+// every urgent mark actually sits, but not on --surface-2. Rather than trust a comment,
+// fail the build if urgent is ever given a --surface-2 background.
+const surfaceTwoRules = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+  .filter(([, , body]) => /background(?:-color)?\s*:\s*var\(--surface-2\)/.test(body))
+  .map(([, selector]) => selector.trim());
+for (const selector of surfaceTwoRules) {
+  const scoped = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+    .filter(([, candidate, body]) => candidate.includes(selector.split(",")[0].trim()) && /(?:^|[^-])color\s*:\s*var\(--urgent\)/.test(body));
+  for (const [, candidate] of scoped) failures.push(`urgent is used on a --surface-2 background in "${candidate.trim()}". DESIGN.md §4.5 forbids this pairing.`);
+}
+
 if (drift.length) { console.info("\nDocumented figures that differ from the computed ratio (informational):"); for (const line of drift) console.info("  " + line); }
 if (failures.length) { console.error("\nContrast check failed:"); for (const line of failures) console.error("  " + line); process.exit(1); }
 console.info("\nAll DESIGN.md §4.5 pairs meet their requirement and globals.css matches tokens.ts.");

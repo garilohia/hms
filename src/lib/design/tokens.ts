@@ -12,7 +12,7 @@ export const colourTokens = {
     groundTop: "#17130F", groundBottom: "#100D0A",
     surface: "#221D18", surface2: "#2D2620", rule: "#342D26", ruleLit: "#443B32",
     ink: "#F0EAE2", inkSoft: "#A79C90", band: "#2B241C",
-    accent: "#57B394", onAccent: "#0D1A15", data: "#D4C4A0", urgent: "#F4655E",
+    accent: "#57B394", onAccent: "#0D1A15", data: "#D4C4A0", urgent: "#F0554F",
   },
 } as const;
 

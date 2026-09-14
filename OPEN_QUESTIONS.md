@@ -36,7 +36,8 @@
 ## OQ006 — Additional PDF scripts
 
 - Clinical PDFs embed Noto Sans and Noto Sans Devanagari, with Latin/Hindi visual fixtures. Characters outside these fonts' coverage, including emoji, cause an explicit PDF-unavailable response rather than a corrupted clinical document. The complete HTML summary and stored original text remain available.
-- Add and visually verify further script fonts before advertising multilingual PDF support beyond the bundled coverage. No patient text is sent to an external font or translation service.
+- Resolved 14 September 2026: the founder confirmed Latin and Devanagari are sufficient for now. This is a scope decision, not a gap. Unsupported scripts continue to return the explicit PDF-unavailable response with the complete HTML summary intact.
+- If further scripts are wanted later, add and visually verify their fonts before advertising the wider coverage. No patient text is sent to an external font or translation service.
 
 ## OQ007 — Operator, retention, grievances and cross-border care before launch
 
@@ -74,7 +75,7 @@
 
 ## OQ014 — DESIGN.md and the reference HTML disagree on one value, and the three densities do not exist in code
 
-- Resolved 11 September 2026. The founder preferred the reference HTML's dark `--urgent` `#F0554F`, but it measures 4.34:1 on dark `--surface-2`, below the 4.5:1 floor in §4.5 and §10, so `scripts/check-contrast.ts` rejects it. DESIGN.md's `#F4655E` (4.87:1 on surface-2) stays, and the repository copy of DESIGN.md is the source; the reference file should be updated to match.
+- Resolved 14 September 2026: the founder chose `#F0554F` (D034). It measures 4.87:1 on `--surface` and 4.34:1 on `--surface-2`, but `--urgent` only ever renders on `--surface` — the alert card's top rule and label, and the chart notch. The 4.5:1 floor is unchanged; the vacuous `urgent on surface-2` row was replaced in `scripts/check-contrast.ts` by a structural guard that fails the build if urgent is ever given a `--surface-2` background. Darkening `--surface-2` was rejected: it drops panel-to-card separation to 1.08:1 and erases Advanced's nested panel. DESIGN.md and the reference HTML now agree.
 - Resolved 11 September 2026: the founder asked for the three densities. `profiles.display_mode` (migration 0035), the `display` settings action, the onboarding choice, More → Display and the Simple and Advanced renderings of Today and History are built (D031).
 
 ## OQ015 — Realtime delivery is unverified in this environment
