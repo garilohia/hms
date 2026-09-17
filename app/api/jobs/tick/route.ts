@@ -17,7 +17,9 @@ export async function POST(request: Request) {
     // Deadlines get priority over a large historical import backlog.
     const urgent = await dispatchAlerts(createDeliveryStore(db), routedTransport(emailTransport(), pushTransport()), { budgetMs: 6000, limit: 5 });
     const integrations = await syncDueIntegrations(db, { limit: 3 });
-    const summaries = await runSummaryJobs(createSummaryStore(db), { limit: 3, timeBudgetMs: 20000 });
+    // One claim may fold in six adjacent days. Use the runner's tested maximum so
+    // a normal historical import reaches Today within the next minute tick.
+    const summaries = await runSummaryJobs(createSummaryStore(db), { limit: 20, timeBudgetMs: 50000 });
     const alerts = await dispatchAlerts(createDeliveryStore(db), routedTransport(emailTransport(), pushTransport()), { budgetMs: 12000, limit: 20 });
     return Response.json({ urgent, integrations, alerts, summaries }, { headers, status: urgent.failed || integrations.failed || alerts.failed || summaries.failed ? 503 : 200 });
   } catch { return Response.json({ error: "Job dispatch failed. Pending work is retained for retry." }, { status: 503, headers }); }

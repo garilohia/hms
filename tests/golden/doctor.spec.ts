@@ -74,10 +74,13 @@ for(const path of [3,4])test(path===3?"golden 3: summary-only doctor, real PDF a
       await page.route("**/api/care",async route=>{
         const input=route.request().postDataJSON();
         if(input.kind==="consult"&&input.action==="message")loseRefresh=true;
-        if(input.kind==="consult_read"&&loseRefresh){loseRefresh=false;await route.abort("failed");}else await route.fallback();
+        // Realtime may issue its own read before the command's explicit refresh.
+        // Keep reads unavailable until the saved-but-not-refreshed state is observed.
+        if(input.kind==="consult_read"&&loseRefresh)await route.abort("failed");else await route.fallback();
       });
       await page.getByLabel("Message",{exact:true}).fill("Sample patient reply");await page.getByRole("button",{name:"Send message",exact:true}).click();
-      await expect(page.getByRole("status")).toContainText("Saved, but the view could not refresh");await expect(page.getByLabel("Message",{exact:true})).toHaveValue("");
+      await expect(page.getByRole("status").filter({hasText:"Saved, but the view could not refresh"})).toBeVisible();await expect(page.getByLabel("Message",{exact:true})).toHaveValue("");
+      loseRefresh=false;
       await page.getByRole("button",{name:"Refresh messages",exact:true}).click();await expect(page.locator(".message-row").getByText("Sample patient reply",{exact:true})).toBeVisible();
       await doctorPage.getByRole("button",{name:"Refresh messages",exact:true}).click();await expect(doctorPage.locator(".message-row").getByText("Sample patient reply",{exact:true})).toBeVisible();
       await doctorPage.getByLabel("Doctor note",{exact:true}).fill("Sample completed review note.");await doctorPage.getByRole("button",{name:"Close consult",exact:true}).click();await expect(doctorPage.getByText("Sample completed review note.",{exact:true})).toBeVisible();await mobile(doctorPage);
