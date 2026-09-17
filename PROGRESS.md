@@ -128,3 +128,9 @@
 - Built: the doctor's shared alert list now uses the DESIGN.md §6 rule, icon and label, matching Today (D033), closing the last open DESIGN_AUDIT item other than the deliberate sparkline decision. Consultation chat gained a live channel (migration 0040): `hms_private.can_receive_consult_live` reuses the participant rule `consult_read` enforces, a `realtime.messages` policy scopes the `consult:<uuid>` topic, and triggers on `messages` and `consults` broadcast a ping carrying no clinical text, so the thread is always re-read through `hms_consult_read`.
 - Verified: `npm run lint`, `npm run typecheck`, `npm test` (136 unit tests); `npm run db:verify` (98 real Postgres tests); `npm run db:migrate` applied 0040; `npm run db:advisors` reported no issues; `npm run build`; `npm run golden:verify -- doctor.spec.ts` (both doctor golden paths pass).
 - Cut: live websocket delivery did not reach the browser in the golden run and was not isolated inside the time box, so the explicit Refresh messages button stays unconditional and the golden path still asserts the refresh-based flow. The same channel mechanism has been unverified on the patient view since migration 0024. Logged as OQ015.
+
+## M0 maintenance — hosted CI database replay — 14 September 2026
+
+- Built: the stock PostgreSQL CI bootstrap now provides the minimal provider-owned Realtime objects required to replay migrations 0024, 0026 and 0040. The fixture is inert and does not claim to verify websocket delivery.
+- Verified: hosted GitHub Actions run `34883833639` passed both the `quality` and `database` jobs for commit `a0f1803`; the quality job ran lint, strict typecheck, 136 unit tests, build and Playwright E2E, and the database job replayed every migration and passed all 98 real PostgreSQL tests.
+- Cut: no Realtime websocket claim is made. End-to-end live delivery remains OQ015.

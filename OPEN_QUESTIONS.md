@@ -10,14 +10,11 @@
 - Status: unresolved before launch. Recording a guardian's consent is part of the build, but does not by itself resolve the verification requirement.
 - Review DPDP Act section 9, final Rules 2025 rule 10 and the child-monitoring restrictions/exceptions for HMS specifically. Do not assume an independent wellness/facilitation app qualifies for a healthcare exemption. Official sources: [Act](https://www.meity.gov.in/static/uploads/2024/02/Digital-Personal-Data-Protection-Act-2023.pdf), [Rules](https://www.meity.gov.in/static/uploads/2025/11/53450e6e5dc0bfa85ebd78686cadad39.pdf).
 
-## OQ002 — Hosted CI result still unobserved
+## OQ002 — Hosted CI result observed and green
 
-- Resolved in part: the checkout now has a Git remote, `origin` → `https://github.com/garilohia/hms.git`, and `big-changes` tracks it. The earlier statement that no remote was configured is superseded.
-- Corrected 15 September 2026: hosted runs do exist and this entry's earlier claim that none had been observed was wrong. Quality #1-#3 (8-9 September, commits 5038da6, 1e82567, 44c8589) passed. Every run from #4 onward has failed.
-- Cause, corroborated by the run history: the first failure is #4 on 10 September, the commit that added `0024_live_health.sql` and with it the first `realtime.messages` reference. The `database` job replays every migration into a stock `postgres:17` service, and 0024, 0026 and 0040 attach broadcast policies to `realtime.messages` and call `realtime.send`/`realtime.topic`, none of which exist outside Supabase. Runs before 0024 are green and every run after it is red, including commits that touch no database code, which is the signature of a failure during migration replay.
-- `scripts/bootstrap-test-db.sql` now stubs that schema the same way it already stubs `auth` and `storage` (commit a0f1803, run #9). The stub is unverified locally: this machine has no Docker and no local Postgres, so the hosted run is itself the verification.
-- Not yet confirmed: which job fails in each red run. If `quality` is also failing, the realtime stub fixes only half of it. Open run #8 and check whether the red is `database`, `quality`, or both.
-- As of 11 September 2026, local `main` is one commit ahead of `origin/main`. That commit is already contained in `origin/big-changes`, so nothing is unbacked.
+- Resolved 14 September 2026. The checkout has `origin` → `https://github.com/garilohia/hms.git`, and hosted GitHub Actions runs are visible.
+- The failures beginning with migration 0024 came from replaying Supabase Realtime migrations in a stock `postgres:17` service without the provider-owned `realtime` schema. `scripts/bootstrap-test-db.sql` now supplies a minimal CI-only `realtime.messages`, `realtime.topic()` and inert `realtime.send()` fixture, matching the existing Auth and Storage fixtures without pretending to test websocket delivery.
+- Hosted run [34883833639](https://github.com/garilohia/hms/actions/runs/34883833639) passed both `quality` and `database` for commit `a0f1803`. Realtime websocket delivery remains a separate launch question under OQ015.
 
 ## OQ003 — Launch email delivery and redirect configuration
 
@@ -87,4 +84,3 @@
 - The websocket ping did not reach the browser in the golden run on 11 September 2026. The database side checks out: RLS is enabled on `realtime.messages`, `authenticated` holds SELECT, the policy and both triggers exist, every function in the path is STABLE and granted, and `setAuth()` with no argument is correct for supabase-js 2.116.0. The cause is therefore above the database and was not isolated within the time box.
 - This is not new to the chat. The patient view's `useRealtimePatientView` has used the same mechanism since migration 0024 and no test has ever asserted that it connects; both surfaces announce only an interrupted connection, so a permanently offline channel is invisible. Treat live delivery on Today, History and the consult thread as unverified until one test asserts it.
 - The consult room therefore keeps its explicit Refresh messages button unconditionally, so chat never depends on the channel. Before launch, confirm Realtime is enabled for the project, watch the websocket handshake in a browser, and add a golden assertion that a message sent by one participant appears for the other without a refresh.
-
