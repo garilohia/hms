@@ -1,9 +1,10 @@
 # Open questions
 
-## OQ016 — Deployed authenticated acceptance remains incomplete
+## OQ016 — Deployed authenticated acceptance verified
 
 - The 18 September deployed run passes the nine anonymous E2E checks, but the full authenticated golden suite has failures. Sample summary draining exceeded the existing 150-second assertion, summary snapshot confirmation was not observed within 20 seconds, the consultation failure-injection assertion encountered multiple status elements while Realtime was reconnecting, and a sign-in navigation exceeded 30 seconds.
 - Do not describe these as passing production flows based on the earlier local golden passes. Reproduce on the isolated Preview environment after its credentials are supplied, without concurrent deployment/full-suite activity, then diagnose the remaining failures. No production assertions were weakened and no application fix is claimed by the operations work.
+- Resolved by the 18 September follow-up: moved Vercel functions from Washington to Mumbai (`vercel.json`, D037), alongside Supabase, and retained the corrected consultation failure-injection test that distinguishes command status from Realtime status. All eleven deployed golden tests passed in 3.8 minutes with the original deadlines and documented Poppler configuration. The run began on `6d228b2`; another task promoted `f34de08` (bounded cron throughput increase and the same test fix) during the run. Both deployments use Mumbai. This passing deployed suite supersedes the failures above, but is not a single immutable-artifact performance benchmark. Notification delivery and isolated Preview remain separate gates.
 
 > **Retired identifier.** OQ008 was opened during M8 for a temporary host-sleep interruption and was resolved and removed once the large-import benchmark passed. That number is retired rather than reused, so the references in PROGRESS.md and `docs/verification/m8-review.md` still point at the retired entry. Production wearable-provider access is OQ012 below.
 
@@ -68,6 +69,7 @@
 
 - A separate free Mumbai project, `hms-preview` (`eqrlycvveqfypalipssq`), was created in the existing garilohia organisation with founder approval after a $0/month quote. All 41 migrations and 25 public device catalogue rows are installed; every public table has RLS and no patient records were copied.
 - Preview has its own public Supabase URL/key and consent salt, with no production database/server credentials. Still needed: staging server key and database credentials, private Storage setup, synthetic persona/doctor seeding, Auth redirect/Preview origin configuration, deployment and deployed tests. The connected tool exposes only publishable keys; the dashboard browser is awaiting founder sign-in. Preview is not yet operational.
+- Follow-up: the founder signed in, but that browser account shows a different organisation and Supabase explicitly denies access to `eqrlycvveqfypalipssq`. Switch to the existing account with garilohia organisation access. Do not create another project/account or substitute the unrelated organisation.
 
 ## OQ012 — Production wearable-provider access
 

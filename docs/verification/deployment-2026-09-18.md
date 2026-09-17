@@ -1,5 +1,15 @@
 # Deployment and environment operations — 18 September 2026
 
+## Production acceptance follow-up
+
+Configured Vercel's single function region as Mumbai (`bom1`) using `vercel.json`, rather than Next.js's deprecated `preferredRegion`. This keeps compute beside the existing Mumbai database without changing providers or plans. Deployment `dpl_4d3JtqteP2QPKZqAVseaKG6RPK5B` was verified Ready with functions in `bom1` and promoted after the other task's existing test process finished.
+
+The full deployed golden command with `HMS_DEPLOYMENT_URL=https://hms-indol-psi.vercel.app`, `HMS_DEPLOYED_ENV_FILE=.env.local`, `HMS_DEPLOYED_SUITE=golden`, and the documented `HMS_PDFTOTEXT`/`FONTCONFIG_FILE` overrides passed all eleven tests in 3.8 minutes. All original deadlines remain unchanged. The existing concurrent doctor test correction keeps injected reads unavailable until the command failure state is observed, preventing Realtime from consuming the one-shot injected failure; it also selects the intended status element.
+
+The run began on runtime `6d228b2` and the other task promoted `f34de08` during it. Current deployment `dpl_9qcRiNTqnD8bSFDXvunWFCxEE7fo` is Ready in Mumbai; its only additional runtime change increases bounded minute-dispatch summary work. Do not present the run as a fixed-artifact latency benchmark. Scheduled HTTP calls at 20:34, 20:35 and 20:36 UTC returned 200 without timeout/error. The earlier failures below are retained as history, not the current acceptance result.
+
+Preview remains blocked: browser sign-in succeeded but Supabase denied that account access to the existing garilohia `hms-preview` project. The founder must switch to the account with that organisation's access before server/database credentials, Storage, fixtures and the actual Preview deployment can be completed.
+
 ## Notification recovery update
 
 The founder restored `RESEND_API_KEY` and `EMAIL_FROM`, then explicitly authorised generating replacement VAPID keys and redeploying. Generated one pair with installed `web-push` 3.6.7, validated it with `setVapidDetails`, and saved the private key as a sensitive Production-only variable. The public key and HTTPS production origin as VAPID subject are also Production-only. No private key was printed, committed or saved locally. The old pair was not recovered.
