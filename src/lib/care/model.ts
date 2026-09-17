@@ -17,4 +17,4 @@ export const consultSchema=z.object({id:z.uuid(),patient_id:z.uuid(),doctor_id:z
 export const consultViewSchema=z.object({consult:consultSchema,messages:z.array(z.object({id:z.uuid(),sender_id:z.uuid().nullable(),body:z.string(),sent_at:z.string(),read_at:z.string().nullable()})),
   next_cursor:z.record(z.string(),z.string()).nullable(),is_doctor:z.boolean(),can_manage:z.boolean(),patient_name:z.string(),doctor_name:z.string(),is_sample:z.boolean()});
 export const listSchema=<T extends z.ZodType>(row:T)=>z.object({rows:z.array(row),next_cursor:z.union([z.uuid(),z.record(z.string(),z.string())]).nullable()});
-export async function carePost(input:unknown) {return z.object({result:z.unknown()}).parse(await patientPost("/api/care",input)).result;}
+export async function carePost(input:unknown,signal?:AbortSignal) {return z.object({result:z.unknown()}).parse(await patientPost("/api/care",input,signal)).result;}

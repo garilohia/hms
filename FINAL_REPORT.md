@@ -1,10 +1,12 @@
-# HMS build handoff — 10 September 2026
+# HMS build handoff — updated 18 September 2026
 
 ## Status: M0–M8 complete; native server foundation added
 
 All nine original milestones are implemented. Subsequent work adds versioned native ingestion, bearer-token authentication, immutable retry receipts, measured latency/freshness, timezone re-bucketing and verified private Realtime invalidations. It does not claim signed native binaries, vendor approval, a supervised pilot or clinical/legal approval.
 
 The original large streaming-import and shorter verification matrix evidence remains below. The linked Vercel project and production site now exist at `https://hms-indol-psi.vercel.app`, but Preview does not yet have deliberate public Supabase configuration. Staging must not silently use production health data.
+
+The 18 September Realtime follow-up passed `npm run check` (136 unit tests), `npm run build` (55 routes) and all five patient/doctor/Realtime golden tests. Live History updates preserve the selected page and reading, and chat recovers messages sent during browser network interruption. These checks used a local production build against the real Supabase project with synthetic fixtures; they do not establish the currently deployed commit. See PROGRESS.md for the earlier full verification matrix and this follow-up's exact commands.
 
 ## What works
 
@@ -67,7 +69,7 @@ The two final import reports are retained in `docs/verification/m8-ingestion.jso
 
 ## Cuts and known limitations
 
-- Vendor-specific Fitbit/Garmin/WHOOP/Oura/Withings connectors are not shipped. The versioned HealthKit/Health Connect server contract and acceptance documents exist, but compiled companions, encrypted device queues, APNs/FCM credentials and physical-device verification remain pending. Catalogue features do not imply HMS import compatibility; Apple HRV SDNN is not relabelled RMSSD.
+- Google Health and WHOOP OAuth connections, encrypted token storage and bounded sync are implemented; production provider approval, credentials and live-account acceptance remain OQ012. Garmin, Oura, Withings and other partner connectors remain gated. The versioned HealthKit/Health Connect server contract and acceptance documents exist, but compiled companions, encrypted device queues, APNs/FCM credentials and physical-device verification remain pending. Catalogue features do not imply HMS import compatibility; Apple HRV SDNN is not relabelled RMSSD.
 - A public Vercel production site and green hosted GitHub Actions runs now exist. The minute scheduler and real notification inbox/device delivery are not yet verified. No third-party partnership or order was created. SMTP/redirect, cron and notification launch checks remain OQ003–OQ004.
 - Doctors in the seed are fictional Sample data. Real credential checks and clinician onboarding must precede clinical use. Chat updates through private Realtime Broadcast and retains explicit Refresh as a recovery control. Video is a supplied Meet/Zoom link; there is no video service, payment flow or guaranteed immediate response. Caregiver invitations use account codes, not delivered invitation emails; the founder accepted this for launch on 14 September 2026 (D035).
 - PDFs embed Latin/Devanagari fonts. Unsupported scripts/emoji produce an explicit error; complete HTML remains available. PDFs show six complete medications and six recent document titles, with prominent remaining counts. Downloaded copies cannot be recalled after revocation. See OQ006.

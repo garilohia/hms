@@ -11,7 +11,8 @@ import {useRealtimePatientView} from "@/src/lib/patient/realtime";
 // The band needs the 28 days before the visible range, so every loaded row is kept as baseline source.
 function mergeRows(previous:Summary[],next:Summary[]) { const byDay=new Map(previous.map(r=>[r.day,r])); for(const row of next) byDay.set(row.day,row); return [...byDay.values()]; }
 export function History({initial,today}:{initial:PatientView;today:string}) {
-  const {view,setView,live}=useRealtimePatientView(initial,"history");
+  const [query,setQuery]=useState<NonNullable<Parameters<typeof readView>[2]>>({});
+  const {view,setView,live}=useRealtimePatientView(initial,"history",query);
   const [metric,setMetric]=useState<ChartMetric>("RHR"),[range,setRange]=useState("90"),[selected,setSelected]=useState<Summary|null>(null),[error,setError]=useState(""),[busy,setBusy]=useState(false);
   const [baselineRows,setBaselineRows]=useState<Summary[]>(initial.summaries??[]);
   const mode=initial.profile.display_mode;
@@ -28,7 +29,8 @@ export function History({initial,today}:{initial:PatientView;today:string}) {
   const rows=(view.summaries??[]).filter(r=>!from||r.day>=from);
   const config=chartMetrics[metric];
   const stale=new Set(view.stale_days??[]);
-  const activeSource=selected?.source_ids[config.source];
+  const selectedReading=selected?rows.find(row=>row.day===selected.day)??null:null;
+  const activeSource=selectedReading?.source_ids[config.source];
   useEffect(()=>{
     const controller=new AbortController();
     if(activeSource) void patientPost("/api/patient/source",{userId,sourceId:activeSource},controller.signal).then(result=>{
@@ -38,7 +40,7 @@ export function History({initial,today}:{initial:PatientView;today:string}) {
   },[activeSource,userId]);
   async function load(nextRange:string,cursor?:Record<string,string>|null) {
     setBusy(true);setError("");
-    try {const next=await readView(userId,"history",{from:nextRange==="All"?null:addDays(today,1-Number(nextRange)),to:today,cursor});setView(next);setBaselineRows(previous=>mergeRows(previous,next.summaries??[]));setRange(nextRange);setSelected(null);setAlerts(null);}
+    try {const nextQuery={from:nextRange==="All"?null:addDays(today,1-Number(nextRange)),to:today,cursor};const next=await readView(userId,"history",nextQuery);setView(next);setQuery(nextQuery);setBaselineRows(previous=>mergeRows(previous,next.summaries??[]));setRange(nextRange);setSelected(null);setAlerts(null);}
     catch(e){setError(e instanceof Error?e.message:"Please try again.");}finally{setBusy(false);}
   }
   async function showAlerts(day:string,cursor?:Record<string,string>|null) {
@@ -58,13 +60,14 @@ export function History({initial,today}:{initial:PatientView;today:string}) {
     })).then(entries=>{ if(!controller.signal.aborted) setSourceLabels(previous=>({...previous,...Object.fromEntries(entries)})); });
     return()=>controller.abort();
   },[missingSources,userId]);
-  const advancedSeries=mode==="advanced"&&rows.length?buildSeries(summaryValues(rows,metric),{kind:config.kind,baseline:summaryValues(baselineRows,metric)}):null;
+  const currentBaselineRows=mergeRows(baselineRows,view.summaries??[]);
+  const advancedSeries=mode==="advanced"&&rows.length?buildSeries(summaryValues(rows,metric),{kind:config.kind,baseline:summaryValues(currentBaselineRows,metric)}):null;
   if(mode==="simple") return <div className="stack" data-testid="patient-live-state" data-live={live}>
     {(Object.keys(chartMetrics) as ChartMetric[]).map(key=>{const c=chartMetrics[key],values=summaryValues(rows,key),latest=[...values].reverse().find(v=>v.value!==null);
       return <section key={key} className="card metric-card">{rows.some(r=>r.contains_sample)&&key==="RHR"&&<span className="badge">Sample data</span>}
         <p className="metric-label"><span>{c.label}</span></p>
         <p className="hero-figure"><span className="hero-score">{latest?formatValue(latest.value!):"—"}</span><span className="unit">{c.unit}</span></p>
-        {latest?<DataChart sparkline values={values} baseline={summaryValues(baselineRows,key)} kind={c.kind} label={c.label} unit={c.unit} height={56}/>:<p className="muted">No readings in the last 90 days.</p>}
+        {latest?<DataChart sparkline values={values} baseline={summaryValues(currentBaselineRows,key)} kind={c.kind} label={c.label} unit={c.unit} height={56}/>:<p className="muted">No readings in the last 90 days.</p>}
       </section>;})}
     <section className="card stack"><h2 className="type-section">Documents</h2>{!docs?<p>Loading documents…</p>:docs.documents?.length?docs.documents.map(d=><div key={d.id} className="list-row"><a href={"/api/documents/"+d.id} className="underline">{d.title}<span className="block muted">{d.type.replaceAll("_"," ")}. Download</span></a></div>):<p className="muted">No documents added.</p>}
       {initial.can_manage&&<DocumentUpload userId={userId} onUploaded={async()=>setDocs(await readView(userId,"documents"))}/>}
@@ -81,7 +84,7 @@ export function History({initial,today}:{initial:PatientView;today:string}) {
       <h2 className="type-section">{metric} <span className="unit">{config.unit}</span></h2>
       {metric==="BP"&&<p className="muted">Systolic trend. Select a day for both blood pressure readings.</p>}
       {!rows.length?<p>No readings in this range. Try a longer range or connect data.</p>:<>
-        <DataChart values={summaryValues(rows,metric)} baseline={summaryValues(baselineRows,metric)} kind={config.kind} label={config.label} unit={config.unit} animate
+        <DataChart values={summaryValues(rows,metric)} baseline={summaryValues(currentBaselineRows,metric)} kind={config.kind} label={config.label} unit={config.unit} animate
           markers={(view.markers??[]).filter(m=>rows.some(r=>r.day===m.day))} onMarker={day=>void showAlerts(day)} onPick={day=>setSelected(rows.find(r=>r.day===day)??null)}
           phases={showPhases?(view.cycles??[]).filter(c=>rows.some(r=>r.day===c.day)):undefined}
           overlays={mode==="advanced"?overlays.map(key=>({label:chartMetrics[key].label,values:summaryValues(rows,key)})):undefined}/>
@@ -94,8 +97,8 @@ export function History({initial,today}:{initial:PatientView;today:string}) {
           <tbody>{[...rows].sort((a,b)=>b.day.localeCompare(a.day)).slice(0,showAllRows?365:30).map(r=><tr key={r.day}><td>{r.day} <StaleDay day={r.day} stale={stale}/></td><td>{r[config.field]===null?"—":formatValue(r[config.field] as number)}</td>{overlays.map(key=><td key={key}>{r[chartMetrics[key].field]===null?"—":formatValue(r[chartMetrics[key].field] as number)}</td>)}<td>{r.source_ids[config.source]?sourceLabels[r.source_ids[config.source]]??"Loading…":"—"}</td></tr>)}</tbody></table>
           {rows.length>30&&<button type="button" className="button secondary mt-3" onClick={()=>setShowAllRows(v=>!v)}>{showAllRows?"Show the latest 30 days":"Show all "+rows.length+" days"}</button>}</div>}
         <label className="form-field">Reading day<select value={selected?.day??""} onChange={e=>setSelected(rows.find(r=>r.day===e.target.value)??null)}><option value="">Choose a point or day</option>{rows.map(r=><option key={r.day} value={r.day}>{r.day}</option>)}</select></label>
-        {selected&&<div className="stack" data-testid="reading-detail"><p><StaleDay day={selected.day} stale={stale}/></p><p>{selected.day}: {selected[config.field]??"No reading"} {config.unit}{metric==="BP"?", diastolic "+(selected.bp_diastolic??"—")+" mmHg":""}</p>
-          {selected.contains_sample&&<span className="badge">Sample data</span>}<p className="muted">Source device: {activeSource?(device?.id===activeSource?device.label:"Loading…"):"Not available"}</p>
+        {selectedReading&&<div className="stack" data-testid="reading-detail"><p><StaleDay day={selectedReading.day} stale={stale}/></p><p>{selectedReading.day}: {selectedReading[config.field]??"No reading"} {config.unit}{metric==="BP"?", diastolic "+(selectedReading.bp_diastolic??"—")+" mmHg":""}</p>
+          {selectedReading.contains_sample&&<span className="badge">Sample data</span>}<p className="muted">Source device: {activeSource?(device?.id===activeSource?device.label:"Loading…"):"Not available"}</p>
           <p className="muted">One source per metric per day is selected. Real readings take priority, then coverage. A day split between devices may be undercounted.</p>
         </div>}
       </>}

@@ -14,7 +14,7 @@
 
 - Resolved 14 September 2026. The checkout has `origin` → `https://github.com/garilohia/hms.git`, and hosted GitHub Actions runs are visible.
 - The failures beginning with migration 0024 came from replaying Supabase Realtime migrations in a stock `postgres:17` service without the provider-owned `realtime` schema. `scripts/bootstrap-test-db.sql` now supplies a minimal CI-only `realtime.messages`, `realtime.topic()` and inert `realtime.send()` fixture, matching the existing Auth and Storage fixtures without pretending to test websocket delivery.
-- Hosted run [34883833639](https://github.com/garilohia/hms/actions/runs/34883833639) passed both `quality` and `database` for commit `a0f1803`. Realtime websocket delivery remains a separate launch question under OQ015.
+- Hosted run [34883833639](https://github.com/garilohia/hms/actions/runs/34883833639) passed both `quality` and `database` for commit `a0f1803`. Realtime websocket delivery was subsequently verified separately under OQ015.
 
 ## OQ003 — Launch email delivery and redirect configuration
 
@@ -83,3 +83,4 @@
 - Resolved 18 September 2026. Today, History and consultation chat now expose their subscription state to browser tests without adding visible copy. History was the concrete gap: it had stopped using `useRealtimePatientView` during the screen redesign and is subscribed again.
 - `tests/golden/realtime.spec.ts` waits for authenticated private-channel `SUBSCRIBED` state, changes a daily summary and observes Today and History update without navigation, then sends one consultation message from each participant and observes it in the other browser without pressing Refresh.
 - The focused test and the complete 11-test golden run passed against the real Supabase project. The explicit Refresh messages button remains as a recovery control for temporary network interruption; live delivery no longer depends on it.
+- The follow-up regression covers live changes on an older page of a 401-day history and recovery of a consultation message sent while the recipient's browser was offline. History retains its range/cursor and selected reading; subscriptions re-read on rejoin and when the browser comes online (D036).

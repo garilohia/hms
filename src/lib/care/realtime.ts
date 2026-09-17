@@ -15,15 +15,32 @@ export function useRealtimeConsult(initial: ConsultView) {
   const consultId = initial.consult.id;
   useEffect(() => {
     const supabase = createClient();
+    let disposed = false;
+    let request: AbortController | undefined;
     const refresh = () => {
+      if (disposed) return;
       if (timer.current) clearTimeout(timer.current);
-      timer.current = setTimeout(() => void carePost({ kind: "consult_read", id: consultId })
-        .then(data => setView(consultViewSchema.parse(data))).catch(() => setLive("offline")), 40);
+      request?.abort();
+      const controller = new AbortController();
+      request = controller;
+      timer.current = setTimeout(() => void carePost({ kind: "consult_read", id: consultId }, controller.signal)
+        .then(data => { if (!disposed && !controller.signal.aborted) { setView(consultViewSchema.parse(data)); if (channel.state === "joined") setLive("live"); } })
+        .catch(() => { if (!disposed && !controller.signal.aborted) setLive("offline"); }), 40);
     };
     const channel = supabase.channel(`consult:${consultId}`, { config: { private: true } })
       .on("broadcast", { event: "changed" }, refresh);
-    void supabase.realtime.setAuth().then(() => channel.subscribe(status => setLive(status === "SUBSCRIBED" ? "live" : status === "CHANNEL_ERROR" || status === "TIMED_OUT" ? "offline" : "connecting")));
-    return () => { if (timer.current) clearTimeout(timer.current); void supabase.removeChannel(channel); };
+    const offline = () => { request?.abort(); if (timer.current) clearTimeout(timer.current); setLive("offline"); };
+    window.addEventListener("offline", offline);
+    window.addEventListener("online", refresh);
+    void supabase.realtime.setAuth().then(() => {
+      if (disposed) return;
+      channel.subscribe(status => {
+        if (disposed) return;
+        setLive(status === "SUBSCRIBED" ? "live" : status === "CHANNEL_ERROR" || status === "TIMED_OUT" ? "offline" : "connecting");
+        if (status === "SUBSCRIBED") refresh();
+      });
+    }).catch(() => { if (!disposed) setLive("offline"); });
+    return () => { disposed = true; window.removeEventListener("offline", offline); window.removeEventListener("online", refresh); request?.abort(); if (timer.current) clearTimeout(timer.current); void supabase.removeChannel(channel); };
   }, [consultId]);
   return { view, setView, live };
 }
