@@ -1,5 +1,5 @@
 {
-  "captured_at": "2026-09-11T08:56:33.560Z",
+  "captured_at": "2026-09-17T19:45:13.412Z",
   "viewport_width": 390,
   "shots": [
     {
@@ -229,7 +229,7 @@
     {
       "name": "summary",
       "scheme": "light",
-      "route": "/summary?profile=43973de7-baa1-4966-9c26-dd7aa8f24687",
+      "route": "/summary?profile=bfce4341-83b1-4187-84de-04e3f90f1ab0",
       "scrollWidth": 390,
       "status": 200
     },
@@ -243,7 +243,7 @@
     {
       "name": "consult",
       "scheme": "light",
-      "route": "/consults/d66d2f79-d981-4e97-9c5a-31076a44467c",
+      "route": "/consults/16b0fd68-e841-43b7-8d91-9cabff8fd86f",
       "scrollWidth": 390,
       "status": 200
     },
@@ -362,7 +362,7 @@
     {
       "name": "summary",
       "scheme": "dark",
-      "route": "/summary?profile=43973de7-baa1-4966-9c26-dd7aa8f24687",
+      "route": "/summary?profile=bfce4341-83b1-4187-84de-04e3f90f1ab0",
       "scrollWidth": 390,
       "status": 200
     },
@@ -376,7 +376,7 @@
     {
       "name": "consult",
       "scheme": "dark",
-      "route": "/consults/d66d2f79-d981-4e97-9c5a-31076a44467c",
+      "route": "/consults/16b0fd68-e841-43b7-8d91-9cabff8fd86f",
       "scrollWidth": 390,
       "status": 200
     },
@@ -474,14 +474,14 @@
     {
       "name": "caregiver-today",
       "scheme": "light",
-      "route": "/today?profile=43973de7-baa1-4966-9c26-dd7aa8f24687",
+      "route": "/today?profile=bfce4341-83b1-4187-84de-04e3f90f1ab0",
       "scrollWidth": 390,
       "status": 200
     },
     {
       "name": "caregiver-alerts",
       "scheme": "light",
-      "route": "/doctor/alerts?profile=43973de7-baa1-4966-9c26-dd7aa8f24687",
+      "route": "/doctor/alerts?profile=bfce4341-83b1-4187-84de-04e3f90f1ab0",
       "scrollWidth": 390,
       "status": 200
     },
@@ -495,14 +495,14 @@
     {
       "name": "caregiver-today",
       "scheme": "dark",
-      "route": "/today?profile=43973de7-baa1-4966-9c26-dd7aa8f24687",
+      "route": "/today?profile=bfce4341-83b1-4187-84de-04e3f90f1ab0",
       "scrollWidth": 390,
       "status": 200
     },
     {
       "name": "caregiver-alerts",
       "scheme": "dark",
-      "route": "/doctor/alerts?profile=43973de7-baa1-4966-9c26-dd7aa8f24687",
+      "route": "/doctor/alerts?profile=bfce4341-83b1-4187-84de-04e3f90f1ab0",
       "scrollWidth": 390,
       "status": 200
     },

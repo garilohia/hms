@@ -261,7 +261,7 @@ The alert list now renders the §6 card: the 2px top rule, the icon and the bold
 
 Chat reuses the mechanism the patient view has used since migration 0024. Migration 0040 adds `hms_private.can_receive_consult_live`, whose participant rule is exactly the one `hms_private.consult_read` already enforces, a `realtime.messages` policy scoped to the `consult:<uuid>` topic, and triggers on `public.messages` and `public.consults`. The broadcast carries only a `changed` ping: no clinical text crosses the channel, and the client re-reads the thread through `hms_consult_read`, so participation and consent are re-checked on every refresh rather than trusted from the socket.
 
-The live ping did not reach the browser in the golden run and the cause was not isolated inside the time box, so the explicit Refresh messages button stays unconditional rather than appearing only when the channel reports itself offline. Chat is therefore never worse than before, and the golden path continues to assert the refresh-based flow, which is the behaviour that is actually guaranteed. The unverified delivery — which equally affects the pre-existing patient view channel — is OQ015.
+The original live ping did not reach the browser in the 11 September golden run, so the explicit Refresh messages button stayed as a recovery control. This verification status is superseded by D036; the channel design and fallback decision remain unchanged.
 
 ## D034 — Dark urgent is #F0554F; the contrast floor is unchanged
 
@@ -274,3 +274,9 @@ Darkening `--surface-2` so the old pair would pass was rejected. `#2A231D` reach
 ## D035 — Scope confirmations: PDF scripts, caregiver invitations
 
 On 14 September 2026 the founder confirmed two limits as deliberate rather than outstanding work. Clinical PDFs stay on Latin and Devanagari; unsupported scripts keep returning the explicit PDF-unavailable response with the complete HTML summary intact (OQ006). Caregiver invitations stay as account codes rather than delivered invitation emails at launch.
+
+## D036 — Realtime invalidations are required on Today, History and consultation chat
+
+All three live surfaces use authenticated private Supabase Broadcast channels carrying only a `changed` ping. The ping never contains health or consultation text; each client re-reads the authorised server view so current ownership, sharing consent and participant access are checked again. History now uses the same `useRealtimePatientView` hook as Today. The UI exposes connection state only through test attributes and the existing interrupted-connection message, preserving the locked copy.
+
+The browser contract is a no-refresh assertion, not merely a successful WebSocket handshake. A live golden test waits for `SUBSCRIBED`, changes a daily summary and observes Today and History, then exchanges consultation messages between two authenticated browser contexts and observes each remote update. The Refresh messages control remains available as a recovery path when a connection is temporarily unavailable.

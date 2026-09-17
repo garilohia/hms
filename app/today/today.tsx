@@ -100,7 +100,7 @@ export function Today({initial,today}:{initial:PatientView;today:string}) {
     try {await patientPost("/api/alerts/settings",{userId,action:"acknowledge",payload:{alertId:alert.id}});setView(await readView(userId,"today"));}
     catch(error){setMessage(error instanceof Error?error.message:"Please try again.");} finally{setBusy(false);}
   }
-  return <div className="stack">
+  return <div className="stack" data-testid="patient-live-state" data-live={live}>
     {view.rebucket&&<RebucketNotice state={view.rebucket}/>}
     <header className="page-header"><h1 className="page-title">Today</h1><p className="page-date">{formatDate(today)}</p><Freshness syncedAt={summary?.computed_at??null} timezone={view.profile.timezone}/></header>
     {live==="offline"&&<p className="muted" role="status">Live connection interrupted; retrying automatically</p>}

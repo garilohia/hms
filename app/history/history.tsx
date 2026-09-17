@@ -7,10 +7,12 @@ import { patientPost,readView,type PatientView,type Summary } from "@/src/lib/pa
 import { DataChart,PhaseSwatch,cyclePhases } from "../ui/chart";
 import { RebucketNotice,StaleDay } from "../ui/rebucket";
 import {DocumentUpload} from "./document-upload";
+import {useRealtimePatientView} from "@/src/lib/patient/realtime";
 // The band needs the 28 days before the visible range, so every loaded row is kept as baseline source.
 function mergeRows(previous:Summary[],next:Summary[]) { const byDay=new Map(previous.map(r=>[r.day,r])); for(const row of next) byDay.set(row.day,row); return [...byDay.values()]; }
 export function History({initial,today}:{initial:PatientView;today:string}) {
-  const [view,setView]=useState(initial),[metric,setMetric]=useState<ChartMetric>("RHR"),[range,setRange]=useState("90"),[selected,setSelected]=useState<Summary|null>(null),[error,setError]=useState(""),[busy,setBusy]=useState(false);
+  const {view,setView,live}=useRealtimePatientView(initial,"history");
+  const [metric,setMetric]=useState<ChartMetric>("RHR"),[range,setRange]=useState("90"),[selected,setSelected]=useState<Summary|null>(null),[error,setError]=useState(""),[busy,setBusy]=useState(false);
   const [baselineRows,setBaselineRows]=useState<Summary[]>(initial.summaries??[]);
   const mode=initial.profile.display_mode;
   // Advanced: up to three overlaid metrics, told apart by weight and dash (DESIGN.md §9).
@@ -57,7 +59,7 @@ export function History({initial,today}:{initial:PatientView;today:string}) {
     return()=>controller.abort();
   },[missingSources,userId]);
   const advancedSeries=mode==="advanced"&&rows.length?buildSeries(summaryValues(rows,metric),{kind:config.kind,baseline:summaryValues(baselineRows,metric)}):null;
-  if(mode==="simple") return <div className="stack">
+  if(mode==="simple") return <div className="stack" data-testid="patient-live-state" data-live={live}>
     {(Object.keys(chartMetrics) as ChartMetric[]).map(key=>{const c=chartMetrics[key],values=summaryValues(rows,key),latest=[...values].reverse().find(v=>v.value!==null);
       return <section key={key} className="card metric-card">{rows.some(r=>r.contains_sample)&&key==="RHR"&&<span className="badge">Sample data</span>}
         <p className="metric-label"><span>{c.label}</span></p>
@@ -69,7 +71,7 @@ export function History({initial,today}:{initial:PatientView;today:string}) {
     </section>
     {error&&<p role="alert">{error}</p>}
   </div>;
-  return <div className="stack">
+  return <div className="stack" data-testid="patient-live-state" data-live={live}>
     {view.rebucket&&<RebucketNotice state={view.rebucket}/>}
     <div aria-label="Metric" className="chips">{Object.keys(chartMetrics).map(key=><button key={key} aria-pressed={metric===key} onClick={()=>{setMetric(key as ChartMetric);setOverlays(o=>o.filter(v=>v!==key));setSelected(null);}}>{key}</button>)}</div>
     {mode==="advanced"&&<div aria-label="Overlay metrics" className="chips">{(Object.keys(chartMetrics) as ChartMetric[]).filter(key=>key!==metric).map(key=><button key={key} aria-pressed={overlays.includes(key)} disabled={!overlays.includes(key)&&overlays.length>=3} onClick={()=>setOverlays(o=>o.includes(key)?o.filter(v=>v!==key):[...o,key])}>{overlays.includes(key)?"Overlay "+(overlays.indexOf(key)+1)+": "+key:"+ "+key}</button>)}</div>}

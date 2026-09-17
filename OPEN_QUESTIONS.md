@@ -19,13 +19,13 @@
 ## OQ003 — Launch email delivery and redirect configuration
 
 - Live Supabase token redemption, browser sessions, and sign-out have been verified using a generated test link without emailing anyone.
-- Before launch, verify delivery to an authorised recipient and ensure the final app URL and auth callback are allowed in Supabase. The exact deployment URL is not available until deployment. No inbox-delivery claim is made by the token/session test.
+- The production application is deployed at `https://hms-indol-psi.vercel.app`. Before launch, confirm that exact origin and its Auth callback/confirmation URLs are allowed in Supabase, then verify a real message with an authorised recipient. No inbox-delivery claim is made by the synthetic token/session tests.
 
 ## OQ004 — Scheduler and notification launch configuration
 
-- The environment has no cron secret, Resend key or VAPID credentials, and no deployed application URL yet. Configure the same random `CRON_SECRET` in Vercel and restricted Supabase Vault, set the deployed `NEXT_PUBLIC_APP_URL`, then run `npm run cron:setup` and observe successful minute-by-minute HTTP responses. Do not assume a successful pg_cron SQL run means the HTTP handler succeeded.
-- Email uses a privacy-preserving console stub until a verified Resend sender/key are configured. Test real delivery only to an authorised recipient. Sample data always remains stubbed. Monitor failed/exhausted delivery rows before launch.
-- Browser worker registration and local notification tests are separate from server Web Push delivery. Web Push subscription storage, recipient rechecks and transport are implemented, but production delivery still requires the configured VAPID pair and a physical-device test. SMS/WhatsApp remain stubs and no provider accounts were created.
+- Vercel now lists `NEXT_PUBLIC_APP_URL`, `CRON_SECRET`, Resend and VAPID variables for Production. Their presence is not delivery evidence. Put the same random `CRON_SECRET` in restricted Supabase Vault, run `npm run cron:setup`, and observe both `cron.job_run_details` and successful HTTP responses in `net._http_response`. Do not run a Vercel minute schedule at the same time.
+- Test real email only with an authorised recipient and confirm the configured sender/domain is verified. Sample data always remains stubbed. Monitor failed and exhausted delivery rows before launch.
+- Web Push subscription storage, recipient rechecks and transport are implemented, but production delivery still needs a physical-device test using the configured VAPID pair. SMS and WhatsApp remain stubs.
 
 ## OQ005 — History timezone changes after import
 
@@ -78,9 +78,8 @@
 - Resolved 14 September 2026: the founder chose `#F0554F` (D034). It measures 4.87:1 on `--surface` and 4.34:1 on `--surface-2`, but `--urgent` only ever renders on `--surface` — the alert card's top rule and label, and the chart notch. The 4.5:1 floor is unchanged; the vacuous `urgent on surface-2` row was replaced in `scripts/check-contrast.ts` by a structural guard that fails the build if urgent is ever given a `--surface-2` background. Darkening `--surface-2` was rejected: it drops panel-to-card separation to 1.08:1 and erases Advanced's nested panel. DESIGN.md and the reference HTML now agree.
 - Resolved 11 September 2026: the founder asked for the three densities. `profiles.display_mode` (migration 0035), the `display` settings action, the onboarding choice, More → Display and the Simple and Advanced renderings of Today and History are built (D031).
 
-## OQ015 — Realtime delivery is unverified in this environment
+## OQ015 — Realtime delivery verified
 
-- The consultation thread now has a live channel: `hms_private.can_receive_consult_live` mirrors the participant rule `hms_private.consult_read` enforces, a `realtime.messages` SELECT policy scopes the `consult:<uuid>` topic, and triggers on `public.messages` and `public.consults` broadcast a `changed` ping carrying no clinical text (migration 0040). All of it is installed and verified present in the database, and the payload deliberately forces a re-read so authorisation and consent are re-checked.
-- The websocket ping did not reach the browser in the golden run on 11 September 2026. The database side checks out: RLS is enabled on `realtime.messages`, `authenticated` holds SELECT, the policy and both triggers exist, every function in the path is STABLE and granted, and `setAuth()` with no argument is correct for supabase-js 2.116.0. The cause is therefore above the database and was not isolated within the time box.
-- This is not new to the chat. The patient view's `useRealtimePatientView` has used the same mechanism since migration 0024 and no test has ever asserted that it connects; both surfaces announce only an interrupted connection, so a permanently offline channel is invisible. Treat live delivery on Today, History and the consult thread as unverified until one test asserts it.
-- The consult room therefore keeps its explicit Refresh messages button unconditionally, so chat never depends on the channel. Before launch, confirm Realtime is enabled for the project, watch the websocket handshake in a browser, and add a golden assertion that a message sent by one participant appears for the other without a refresh.
+- Resolved 18 September 2026. Today, History and consultation chat now expose their subscription state to browser tests without adding visible copy. History was the concrete gap: it had stopped using `useRealtimePatientView` during the screen redesign and is subscribed again.
+- `tests/golden/realtime.spec.ts` waits for authenticated private-channel `SUBSCRIBED` state, changes a daily summary and observes Today and History update without navigation, then sends one consultation message from each participant and observes it in the other browser without pressing Refresh.
+- The focused test and the complete 11-test golden run passed against the real Supabase project. The explicit Refresh messages button remains as a recovery control for temporary network interruption; live delivery no longer depends on it.

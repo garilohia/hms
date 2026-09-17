@@ -33,7 +33,7 @@ export function ConsultRoom({initial,actor}:{initial:z.infer<typeof consultViewS
   {view.is_doctor&&["requested","accepted","scheduled"].includes(c.status)&&<section className="card stack"><h2>Schedule</h2><form className="stack" onSubmit={schedule}>
     <label>Appointment time (your browser timezone)<input type="datetime-local" name="time" required/></label><label>Optional Google Meet or Zoom link<input type="url" name="url" maxLength={300} placeholder="https://meet.google.com/…"/></label>
     <p className="muted">Paste a link you have arranged. HMS does not create a video meeting.</p><button className="button secondary" disabled={busy}>Save appointment</button></form></section>}
-  <section className="card stack"><h2>Messages</h2>
+  <section className="card stack" data-testid="consult-live-state" data-live={live}><h2>Messages</h2>
     {live==="offline"&&<p className="muted" role="status">Live connection interrupted; retrying automatically</p>}
     <button className="button secondary" disabled={busy} onClick={()=>refresh()}>Refresh messages</button>
     {view.messages.length?[...view.messages].reverse().map(m=><div key={m.id} className="message-row"><p className="muted">{m.sender_id===actor?"You":"Other participant"}, {m.sent_at.replace("T"," ")}</p><p style={{whiteSpace:"pre-wrap",overflowWrap:"anywhere"}}>{m.body}</p></div>):<p className="muted">No messages yet.</p>}

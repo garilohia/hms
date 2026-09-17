@@ -134,3 +134,9 @@
 - Built: the stock PostgreSQL CI bootstrap now provides the minimal provider-owned Realtime objects required to replay migrations 0024, 0026 and 0040. The fixture is inert and does not claim to verify websocket delivery.
 - Verified: hosted GitHub Actions run `34883833639` passed both the `quality` and `database` jobs for commit `a0f1803`; the quality job ran lint, strict typecheck, 136 unit tests, build and Playwright E2E, and the database job replayed every migration and passed all 98 real PostgreSQL tests.
 - Cut: no Realtime websocket claim is made. End-to-end live delivery remains OQ015.
+
+## Realtime and production verification — 18 September 2026
+
+- Built: History now subscribes to the same PHI-free private patient invalidation channel as Today. Today, History and consultation chat expose connection state through test-only data attributes. Added a two-user golden test that proves remote updates without refresh and keeps the manual chat refresh as a recovery control (D036, resolved OQ015).
+- Verified: production Supabase contains all 41 migrations, both Realtime policies, five helper functions, five triggers and RLS on `realtime.messages`. `npm run check` (136 unit tests), `npm run build` (55 routes), `npm run db:verify` (98), `npm run db:advisors` (no issues), `npm run storage:setup`, `npm run e2e` (9), `npm run auth:verify` (2), `npm run ingestion:verify` (2, including 620,285-record import and zero-insert re-import), `npm run alerts:verify` (1), `npm run golden:verify` (11, including no-refresh Realtime), `npm run pdf:verify` (six one-page fixtures), and `npm run design:audit` (73 screenshots, no page errors or horizontal overflow) all pass.
+- Cut: production cron responses, real inbox delivery and physical-device push remain launch configuration/acceptance work under OQ003–OQ004. Preview still lacks deliberate public Supabase configuration under OQ011.
