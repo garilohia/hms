@@ -160,3 +160,9 @@
 - Built: founder restored Resend settings and authorised a replacement VAPID pair. Generated/validated one pair using installed `web-push`; saved the private key as sensitive, Production-only, without printing or storing it locally. Set the public key and production HTTPS origin as subject. Rebuilt the existing deployed source using `vercel redeploy dpl_GLEjk1tBo3qpimszeZGuhFUJpqLz --target production --no-wait`, leaving concurrent test edits untouched.
 - Verified: `npm run build` (55 routes), `npm run check` (136 unit tests), Ready deployment `dpl_Cac6aMw5jAnoAhncfFxJHpd3dQX9` at the public production alias, and metadata confirming all five Resend/VAPID names in the deployment snapshot. `HMS_DEPLOYMENT_URL=https://hms-indol-psi.vercel.app npx playwright test --config playwright.deployed.config.ts` passed all nine tests in 19.5 seconds.
 - Cut: real inbox and physical-device delivery remain unverified. No notification was sent by these checks. Existing browser subscriptions require Disable then Enable instant alerts. Earlier authenticated acceptance failures and Preview credential blockers remain open; notification restoration does not resolve them.
+
+## M7 follow-up — Co-locate deployment with data — 18 September 2026
+
+- Built: `vercel.json` selects Mumbai (`bom1`) instead of Washington for server functions, keeping the database and single-region plan unchanged (D037). Preserved another task's uncommitted doctor failure-injection test fix.
+- Verified before deployment: `npm run check` (136 tests) and `npm run build` (55 routes). Deployed acceptance is pending below; no test timeouts were increased.
+- Preview access: browser sign-in succeeded but the account has only a different organisation; Supabase explicitly denied access to `hms-preview`. Requested switching to the existing garilohia owner account. No new account or organisation was created.
