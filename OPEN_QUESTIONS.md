@@ -1,5 +1,10 @@
 # Open questions
 
+## OQ016 — Deployed authenticated acceptance remains incomplete
+
+- The 18 September deployed run passes the nine anonymous E2E checks, but the full authenticated golden suite has failures. Sample summary draining exceeded the existing 150-second assertion, summary snapshot confirmation was not observed within 20 seconds, the consultation failure-injection assertion encountered multiple status elements while Realtime was reconnecting, and a sign-in navigation exceeded 30 seconds.
+- Do not describe these as passing production flows based on the earlier local golden passes. Reproduce on the isolated Preview environment after its credentials are supplied, without concurrent deployment/full-suite activity, then diagnose the remaining failures. No production assertions were weakened and no application fix is claimed by the operations work.
+
 > **Retired identifier.** OQ008 was opened during M8 for a temporary host-sleep interruption and was resolved and removed once the large-import benchmark passed. That number is retired rather than reused, so the references in PROGRESS.md and `docs/verification/m8-review.md` still point at the retired entry. Production wearable-provider access is OQ012 below.
 
 ## OQ001 — Verifiable parental consent before launch
@@ -23,7 +28,8 @@
 
 ## OQ004 — Scheduler and notification launch configuration
 
-- Vercel now lists `NEXT_PUBLIC_APP_URL`, `CRON_SECRET`, Resend and VAPID variables for Production. Their presence is not delivery evidence. Put the same random `CRON_SECRET` in restricted Supabase Vault, run `npm run cron:setup`, and observe both `cron.job_run_details` and successful HTTP responses in `net._http_response`. Do not run a Vercel minute schedule at the same time.
+- The Supabase minute dispatcher was activated on 18 September 2026 with a matching server/Vault secret. Actual HTTP 200 responses were observed at 20:08 and 20:09 UTC on 17 September; a 401 during concurrent deployment was followed by a successful 20:11 UTC call. SQL scheduling success alone is not HTTP delivery evidence. No duplicate Vercel cron is configured.
+- Configuration incident: removing Preview scope with `vercel env rm` deleted entire shared Production/Preview records. Production database credentials were restored, and the cron secret and consent salt replaced. Resend/VAPID values could not be recovered: restore `RESEND_API_KEY`, `EMAIL_FROM`, `NEXT_PUBLIC_VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, and `VAPID_SUBJECT` in Production, then redeploy. Email and push are currently disabled/stubbed. The retired, unused `FITBIT_CLIENT_ID` was also removed. See `docs/verification/deployment-2026-09-18.md`.
 - Test real email only with an authorised recipient and confirm the configured sender/domain is verified. Sample data always remains stubbed. Monitor failed and exhausted delivery rows before launch.
 - Web Push subscription storage, recipient rechecks and transport are implemented, but production delivery still needs a physical-device test using the configured VAPID pair. SMS and WhatsApp remain stubs.
 
@@ -31,7 +37,7 @@
 
 - Resolved 11 September 2026. The founder asked for the change to work, and it is built and verified (D032, migrations 0037-0039). Raw readings are absolute instants and never move; changing the home timezone re-enqueues every affected local day through the existing durable summary queue, drained by the owner-driven refresh batches that already serve import.
 - Past alerts are re-evaluated under the new zone, with a narrow prune of unacknowledged, non-escalated events older than 24 hours so nothing already acted on is rewritten and no notification is re-sent. History and Today stay readable and label each day still awaiting recalculation. Shared snapshots stay immutable and now carry the timezone they were computed in, with a flag on the doctor's copy when the patient has since moved.
-- Still open: country of residence remains separate from the history timezone. A very long history needs several visits to finish draining while the minute scheduler is undeployed (OQ004).
+- Still open: country of residence remains separate from the history timezone. The minute scheduler now drains durable summary work without requiring browser visits; large backlogs remain bounded rather than instantaneous (OQ004).
 
 ## OQ006 — Additional PDF scripts
 
@@ -59,7 +65,8 @@
 
 ## OQ011 — Vercel preview environment parity
 
-- The Vercel project is accessible, but its public Supabase URL/publishable key are currently listed for Production and Development rather than Preview. Add deliberate Preview values and a Preview `NEXT_PUBLIC_APP_URL` strategy before treating a preview deployment as a functioning staging environment. Do not silently reuse production health data for a staging pilot.
+- A separate free Mumbai project, `hms-preview` (`eqrlycvveqfypalipssq`), was created in the existing garilohia organisation with founder approval after a $0/month quote. All 41 migrations and 25 public device catalogue rows are installed; every public table has RLS and no patient records were copied.
+- Preview has its own public Supabase URL/key and consent salt, with no production database/server credentials. Still needed: staging server key and database credentials, private Storage setup, synthetic persona/doctor seeding, Auth redirect/Preview origin configuration, deployment and deployed tests. The connected tool exposes only publishable keys; the dashboard browser is awaiting founder sign-in. Preview is not yet operational.
 
 ## OQ012 — Production wearable-provider access
 
