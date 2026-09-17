@@ -1,5 +1,13 @@
 # Deployment and environment operations — 18 September 2026
 
+## Notification recovery update
+
+The founder restored `RESEND_API_KEY` and `EMAIL_FROM`, then explicitly authorised generating replacement VAPID keys and redeploying. Generated one pair with installed `web-push` 3.6.7, validated it with `setVapidDetails`, and saved the private key as a sensitive Production-only variable. The public key and HTTPS production origin as VAPID subject are also Production-only. No private key was printed, committed or saved locally. The old pair was not recovered.
+
+Redeployed the existing production source, preserving the other task's uncommitted test edits. Deployment `dpl_Cac6aMw5jAnoAhncfFxJHpd3dQX9` (`https://hms-brulp6jy3-gari4.vercel.app`) is Ready and serves `https://hms-indol-psi.vercel.app`. Its environment snapshot contains all five Resend/VAPID variable names. Build and `npm run check` pass (136 unit tests). Real email receipt and physical-device Web Push delivery remain unverified; no test message was sent. Existing devices should use More → Alert rules → Disable, then Enable instant alerts, because the UI otherwise reuses an existing subscription bound to the old key.
+
+The incident notes below preserve the earlier state; notification configuration is no longer missing.
+
 ## Production
 
 Runtime revision: `6fbe1e6`. Public origin: https://hms-indol-psi.vercel.app.
