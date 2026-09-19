@@ -34,6 +34,7 @@ Use the Google Health API, not legacy Fitbit or Google Fit developer credentials
 3. Configure Google Auth Platform branding, support contact, audience and data access. Review any terms yourself.
 4. Create a **Web application** OAuth client. Register the HMS callback from section 1 instead of the example Google/Playground callback in the tutorial.
 5. Save its client ID as `GOOGLE_HEALTH_CLIENT_ID` and its client secret as `GOOGLE_HEALTH_CLIENT_SECRET` in `.env.local` and the appropriate Vercel environment. Downloaded credential JSON is not an HMS input and should stay outside the repository.
+   Also set `GOOGLE_HEALTH_QUOTA_PROJECT_ID` to that Google Cloud project's permanent project ID, not its display name or numeric project number. HMS fails closed when this shared-allowance scope is missing or invalid. All deployments using the same Google project or WHOOP client must use the same quota database; do not invent an environment suffix or reuse production credentials with an isolated preview database. WHOOP's scope comes from `WHOOP_CLIENT_ID`, with no extra quota environment variable.
 6. While testing, add permitted Google accounts under Audience → Test users. Current Google Health setup documentation caps unverified applications at 100 users and requires security review for wider access. Complete the provider's verification process before public rollout. [Official setup](https://developers.google.com/health/setup)
 
 Configure the exact current read-only scopes requested by `src/lib/integrations/providers.ts`:

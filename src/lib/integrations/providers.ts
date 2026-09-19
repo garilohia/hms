@@ -1,7 +1,7 @@
 import "server-only";
 import { z } from "zod";
 import type { IntegrationProvider, StoredTokens } from "./model";
-import { providerResponseError } from "./rate-limit";
+import { providerRequest } from "./request-budget";
 
 type ProviderConfig = {
   label: string;
@@ -37,12 +37,13 @@ export function callbackUrl(origin: string, provider: IntegrationProvider) {
 }
 
 export async function exchangeCode(provider: IntegrationProvider, code: string, redirectUri: string, verifier?:string, nonce?:string): Promise<{tokens: StoredTokens; externalId: string; scopes: string[]}> {
+  const deadline = Date.now() + 20_000;
   const signal = AbortSignal.timeout(20_000);
   const config = providerConfig(provider);
   if (!config.clientId || !config.clientSecret) throw new Error(`${config.label} credentials are not configured.`);
   const body = new URLSearchParams({ grant_type: "authorization_code", code, redirect_uri: redirectUri, client_id: config.clientId, client_secret: config.clientSecret });
   if(verifier)body.set("code_verifier",verifier);
-  const response = await fetch(config.tokenEndpoint, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" }, body, cache: "no-store", redirect: "error", signal });
+  const response = await providerRequest(provider, config.tokenEndpoint, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" }, body, cache: "no-store", redirect: "error", signal }, deadline);
   const parsed = z.object({ access_token: z.string().min(1), refresh_token: z.string().min(1).optional(), token_type: z.string().default("Bearer"), expires_in: z.number().positive().optional(), scope: z.string().optional(), id_token: z.string().optional() }).safeParse(await response.json().catch(() => null));
   if (!response.ok || !parsed.success) throw new Error(`${config.label} did not return a usable access token.`);
   const expiresAt = parsed.data.expires_in ? new Date(Date.now() + parsed.data.expires_in * 1000).toISOString() : undefined;
@@ -53,7 +54,7 @@ export async function exchangeCode(provider: IntegrationProvider, code: string, 
     if (!identity?.success || (nonce && identity.data.nonce !== nonce)) throw new Error("Google Health did not return a valid account identity.");
     externalId = identity.data.sub;
   } else {
-    const profile = await fetch("https://api.prod.whoop.com/developer/v2/user/profile/basic", { headers: { Authorization: `Bearer ${parsed.data.access_token}` }, cache: "no-store", redirect: "error", signal });
+    const profile = await providerRequest(provider, "https://api.prod.whoop.com/developer/v2/user/profile/basic", { headers: { Authorization: `Bearer ${parsed.data.access_token}` }, cache: "no-store", redirect: "error", signal }, deadline);
     const identity = z.object({ user_id: z.union([z.string(), z.number()]).transform(String) }).safeParse(await profile.json().catch(() => null));
     if (!profile.ok || !identity.success) throw new Error("WHOOP did not return an account identity.");
     externalId = identity.data.user_id;
@@ -69,9 +70,7 @@ export async function refreshAccessToken(provider: IntegrationProvider, current:
   if (remaining <= 0) throw new Error(`${config.label} refresh is queued for the next sync.`);
   const body = new URLSearchParams({ grant_type: "refresh_token", refresh_token: current.refreshToken, client_id: config.clientId, client_secret: config.clientSecret });
   if (provider === "whoop") body.set("scope", "offline");
-  const response = await fetch(config.tokenEndpoint, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" }, body, cache: "no-store", redirect: "error", signal: AbortSignal.timeout(remaining) });
-  const throttle = providerResponseError(response, provider);
-  if (throttle) throw throttle;
+  const response = await providerRequest(provider, config.tokenEndpoint, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" }, body, cache: "no-store", redirect: "error", signal: AbortSignal.timeout(remaining) }, deadline);
   const parsed = z.object({ access_token: z.string().min(1), refresh_token: z.string().min(1).optional(), token_type: z.string().default(current.tokenType), expires_in: z.number().positive().optional() }).safeParse(await response.json().catch(() => null));
   if (!response.ok || !parsed.success) throw new Error(`${config.label} access could not be refreshed.`);
   return { accessToken: parsed.data.access_token, refreshToken: parsed.data.refresh_token || current.refreshToken, tokenType: parsed.data.token_type,

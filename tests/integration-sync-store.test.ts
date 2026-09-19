@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fairSyncCheckpoint } from "@/src/lib/integrations/checkpoint";
 import { ProviderRateLimitError } from "@/src/lib/integrations/rate-limit";
+import { ProviderBudgetDeferredError } from "@/src/lib/integrations/request-budget";
 
 const mocks = vi.hoisted(() => ({ unsafe: vi.fn(), bindActor: vi.fn(), lockOwnedSubject: vi.fn(), end: vi.fn(), refresh: vi.fn(), begin: vi.fn() }));
 vi.mock("server-only", () => ({}));
@@ -10,7 +11,7 @@ vi.mock("@/src/lib/data-rights/server", () => ({
 }));
 vi.mock("@/src/lib/integrations/providers", () => ({ providerConfig: vi.fn(), refreshAccessToken: mocks.refresh }));
 vi.mock("@/src/lib/integrations/crypto", () => ({ seal: () => "rotated-version", unseal: () => ({ accessToken: "synthetic-access", refreshToken: "synthetic-refresh", tokenType: "Bearer" }) }));
-import { assertIntegrationReady, CommittedIntegrationCooldownError, markIntegrationSynced, refreshIntegrationTokens, saveIntegrationCooldown } from "@/src/lib/integrations/store";
+import { assertIntegrationReady, CommittedIntegrationBudgetError, CommittedIntegrationCooldownError, markIntegrationSynced, refreshIntegrationTokens, saveIntegrationCooldown } from "@/src/lib/integrations/store";
 
 const now = Date.parse("2026-09-19T12:00:00Z");
 const initial = fairSyncCheckpoint({ version: 1, provider: "google_health", window: { start: "2026-09-11T12:00:00.000Z", end: "2026-09-18T12:00:00.000Z", firstDay: "2026-09-11", nextDay: "2026-09-19" }, collections: ["heart-rate", "sleep"], collectionIndex: 0, nextToken: "page-2" });
@@ -35,7 +36,7 @@ describe("provider sync storage guards", () => {
     const finish = mocks.unsafe.mock.calls.find(([sql]) => sql.startsWith("update hms_private.integration_connections c"));
     expect(finish?.[0]).toContain("c.sync_checkpoint is not distinct from $3::text::jsonb");
     expect(finish?.[0]).toContain("greatest(next_sync_at,now()+interval '1 minute')");
-    expect(finish?.[0]).toContain("when last_error='ProviderRateLimited' and next_sync_at>now() then last_error");
+    expect(finish?.[0]).toContain("when last_error in ('ProviderRateLimited','ProviderBudgetQueued') and next_sync_at>now() then last_error");
     expect(finish?.[1].slice(0, 2)).toEqual(["subject", "google_health"]);
     expect(JSON.parse(String(finish?.[1][2]))).toEqual(complete);
     expect(mocks.unsafe).toHaveBeenCalledWith("update public.data_sources set last_sync_at=$1 where id=$2 and user_id=$3", [initial.window.end, "source", "subject"]);
@@ -53,7 +54,7 @@ describe("provider sync storage guards", () => {
     expect(update[0]).toContain("greatest(next_sync_at,$1)");
     expect(update[0]).not.toContain("sync_checkpoint");
     expect(update[0]).not.toContain("sync_locked_until");
-    expect(update[1]).toEqual([retryAt, "subject", "google_health"]);
+    expect(update[1]).toEqual([retryAt, "subject", "google_health", "ProviderRateLimited"]);
   });
 
   it("cannot apply a late 429 to a stopped or replaced connection", async () => {
@@ -98,8 +99,8 @@ describe("provider sync storage guards", () => {
     });
     mocks.unsafe.mockImplementation(async (sql: string, values: unknown[]) => {
       if (sql.startsWith("select c.last_error")) return [state];
-      if (sql.includes("last_error='ProviderRateLimited'")) {
-        state = { last_error: "ProviderRateLimited", next_sync_at: (values[0] as Date).toISOString() };
+      if (sql.includes("last_error=$4")) {
+        state = { last_error: values[3], next_sync_at: (values[0] as Date).toISOString() };
         events.push("persist cooldown");
       }
       return [];
@@ -123,5 +124,18 @@ describe("provider sync storage guards", () => {
     expect(events).toEqual(["begin", "persist cooldown", "commit", "begin"]);
     expect(mocks.refresh).toHaveBeenCalledOnce();
     expect(mocks.unsafe.mock.calls.some(([sql]) => sql.includes("set encrypted_tokens="))).toBe(false);
+  });
+
+  it("preserves local-budget meaning when refresh commits a deferral under its grant lock", async () => {
+    const error = new ProviderBudgetDeferredError(new Date(now + 10_000));
+    mocks.refresh.mockRejectedValueOnce(error);
+    await expect(refreshIntegrationTokens("actor", "subject", "whoop", "version")).rejects.toBeInstanceOf(CommittedIntegrationBudgetError);
+    const update = mocks.unsafe.mock.calls.find(([sql]) => sql.includes("last_error=$4"));
+    expect(update?.[1]).toEqual([error.retryAt, "subject", "whoop", "ProviderBudgetQueued"]);
+  });
+
+  it("surfaces a stored local budget delay with its distinct queued message", async () => {
+    mocks.unsafe.mockResolvedValueOnce([{ last_error: "ProviderBudgetQueued", next_sync_at: new Date(now + 10_000).toISOString() }]);
+    await expect(assertIntegrationReady("actor", "subject", "whoop", "version")).rejects.toBeInstanceOf(ProviderBudgetDeferredError);
   });
 });

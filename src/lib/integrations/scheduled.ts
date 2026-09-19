@@ -2,6 +2,7 @@ import "server-only";
 import postgres from "postgres";
 import { integrationProvider } from "./model";
 import { syncIntegration } from "./sync";
+import { ProviderBudgetDeferredError } from "./request-budget";
 
 type DueConnection = { userId: string; actor: string; provider: ReturnType<typeof integrationProvider.parse>; lease: Date };
 
@@ -22,22 +23,26 @@ export async function syncDueIntegrations(db: postgres.Sql, options: { limit?: n
     if (Date.now() >= deadline) break;
     const now = options.clock?.() ?? new Date(), due = await claim(db, now);
     if (!due) break;
+    let progressed = false;
     try {
       // Stop starting pages after a small slice, but let an already-started
       // request use the remaining shared budget. A hard three-second fetch
       // timeout could otherwise replay a healthy four-second page forever.
       const startDeadline = Math.min(deadline, Date.now() + 8_000);
-      let progressed = false;
       const sync = await syncIntegration(due.actor, due.userId, due.provider, { deadline, startDeadline, maxPages: 3, onPageComplete: () => { progressed = true; } });
       if (sync.complete) result.synced++; else result.queued++;
       result.inserted += sync.inserted;
       // Tail connections that could not advance a page remain due ahead of
       // serviced work next tick. Do not count fetch/ingestion without cursor CAS.
       const nextAttempt = new Date(now.getTime() + (progressed || sync.complete ? 60_000 : 0));
-      await db.unsafe("update hms_private.integration_connections c set sync_locked_until=null,next_sync_at=greatest(c.next_sync_at,$1),last_error=case when c.last_error='ProviderRateLimited' and c.next_sync_at>$2 then c.last_error else null end,updated_at=$2 from public.data_sources s where s.id=c.source_id and s.status='connected' and c.user_id=$3 and c.provider=$4 and c.sync_locked_until=$5", [nextAttempt, now, due.userId, due.provider, due.lease]);
-    } catch {
-      result.failed++;
-      await db.unsafe("update hms_private.integration_connections c set sync_locked_until=null,next_sync_at=case when c.last_error='ProviderRateLimited' and c.next_sync_at>$2 then c.next_sync_at else greatest(c.next_sync_at,$1) end,last_error=case when c.last_error='ProviderRateLimited' and c.next_sync_at>$2 then c.last_error else 'ProviderSyncFailed' end,updated_at=$2 from public.data_sources s where s.id=c.source_id and s.status='connected' and c.user_id=$3 and c.provider=$4 and c.sync_locked_until=$5", [new Date(now.getTime() + 5 * 60_000), now, due.userId, due.provider, due.lease]);
+      await db.unsafe("update hms_private.integration_connections c set sync_locked_until=null,next_sync_at=greatest(c.next_sync_at,$1),last_error=case when c.last_error in ('ProviderRateLimited','ProviderBudgetQueued') and c.next_sync_at>$2 then c.last_error else null end,updated_at=$2 from public.data_sources s where s.id=c.source_id and s.status='connected' and c.user_id=$3 and c.provider=$4 and c.sync_locked_until=$5", [nextAttempt, now, due.userId, due.provider, due.lease]);
+    } catch (error) {
+      const budgetQueued = error instanceof ProviderBudgetDeferredError;
+      if (budgetQueued) result.queued++; else result.failed++;
+      // A serviced connection must not tie with unserved connections at the
+      // shared bucket's next permit and win repeatedly by stable user-id order.
+      const nextAttempt = budgetQueued ? new Date(Math.max(error.retryAt.getTime(), now.getTime() + (progressed ? 60_000 : 0))) : new Date(now.getTime() + 5 * 60_000);
+      await db.unsafe("update hms_private.integration_connections c set sync_locked_until=null,next_sync_at=case when $7::boolean then greatest(c.next_sync_at,$1) when c.last_error in ('ProviderRateLimited','ProviderBudgetQueued') and c.next_sync_at>$2 then c.next_sync_at else greatest(c.next_sync_at,$1) end,last_error=case when c.last_error in ('ProviderRateLimited','ProviderBudgetQueued') and c.next_sync_at>$2 then c.last_error else $6 end,updated_at=$2 from public.data_sources s where s.id=c.source_id and s.status='connected' and c.user_id=$3 and c.provider=$4 and c.sync_locked_until=$5", [nextAttempt, now, due.userId, due.provider, due.lease, budgetQueued ? "ProviderBudgetQueued" : "ProviderSyncFailed", budgetQueued]);
     }
   }
   return result;

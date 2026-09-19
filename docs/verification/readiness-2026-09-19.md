@@ -1,5 +1,7 @@
 # External readiness follow-up — 19 September 2026
 
+Later work on the same day is recorded in [live-read recovery](recovery-2026-09-19.md) and [shared provider allowance](provider-budget-2026-09-19.md). Those reports supersede pending implementation items here without changing these historical test results.
+
 ## Changes
 
 - Google Health: intraday heart-rate normalisation, corrected VO₂ max scope, daily-date filtering, and seven-day late-arrival reconciliation.

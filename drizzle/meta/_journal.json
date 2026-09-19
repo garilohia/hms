@@ -295,6 +295,13 @@
       "when": 1789810440345,
       "tag": "0041_integration_sync_checkpoint",
       "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1789816661052,
+      "tag": "0042_provider_request_budgets",
+      "breakpoints": true
     }
   ]
 }

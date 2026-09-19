@@ -1,15 +1,22 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
+const quota = vi.hoisted(() => ({ unsafe: vi.fn(), end: vi.fn() }));
+vi.mock("@/src/lib/data-rights/server", () => ({ rightsDatabase: () => ({ unsafe: quota.unsafe, end: quota.end }) }));
 
 import { revokeProviderAccess } from "@/src/lib/integrations/revocation";
 import { exchangeCode, providerConfig, refreshAccessToken } from "@/src/lib/integrations/providers";
 import { ProviderRateLimitError } from "@/src/lib/integrations/rate-limit";
+import { ProviderBudgetDeferredError } from "@/src/lib/integrations/request-budget";
 
 const tokens = { accessToken: "test-access", refreshToken: "test-refresh", tokenType: "Bearer" };
 
 describe("provider access revocation", () => {
   beforeEach(() => {
+    vi.clearAllMocks();
+    quota.unsafe.mockImplementation(async (sql: string, values: unknown[]) => [{ retry_at: sql.includes("defer_provider_requests") ? values[2] : null }]);
+    quota.end.mockResolvedValue(undefined);
+    vi.stubEnv("GOOGLE_HEALTH_QUOTA_PROJECT_ID", "hms-test-project");
     vi.stubEnv("WHOOP_CLIENT_ID", "test-client");
     vi.stubEnv("WHOOP_CLIENT_SECRET", "test-secret");
   });
@@ -57,7 +64,8 @@ describe("provider access revocation", () => {
     expect(result.tokens).toMatchObject({ accessToken: "new-access", refreshToken: "new-refresh" });
     expect(request.mock.calls[1][1].body.get("scope")).toBe("offline");
     expect(request.mock.calls[2][1].headers.Authorization).toBe("Bearer new-access");
-    expect(new Set(request.mock.calls.map(call => call[1].signal)).size).toBe(1);
+    expect(request.mock.calls.every(call => call[1].signal instanceof AbortSignal)).toBe(true);
+    expect(quota.unsafe.mock.calls.filter(([sql]) => sql.includes("reserve_provider_request"))).toHaveLength(3);
   });
 
   it("does not mistake an expired WHOOP access token for revoked provider consent", async () => {
@@ -83,7 +91,8 @@ describe("provider access revocation", () => {
     vi.stubGlobal("fetch", request);
     const result = await exchangeCode("whoop", "test-code", "https://hms.example/callback");
     expect(result.externalId).toBe("123");
-    expect(request.mock.calls[0][1].signal).toBe(request.mock.calls[1][1].signal);
+    expect(request.mock.calls.every(call => call[1].signal instanceof AbortSignal)).toBe(true);
+    expect(quota.unsafe.mock.calls.filter(([sql]) => sql.includes("reserve_provider_request"))).toHaveLength(2);
     expect(request.mock.calls[0][1].redirect).toBe("error");
   });
 
@@ -108,10 +117,11 @@ describe("provider access revocation", () => {
     vi.stubEnv("GOOGLE_HEALTH_CLIENT_SECRET", "test-secret");
     const response = new Response("Provider error body must not be read", { status: 429, headers: { "Retry-After": "900" } });
     const parseBody = vi.spyOn(response, "json");
+    const cancelBody = vi.spyOn(response.body!, "cancel");
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response));
     await expect(refreshAccessToken(provider, tokens)).rejects.toMatchObject({ name: "ProviderRateLimitError", retryAt: new Date("2026-09-19T12:15:00Z") });
     expect(parseBody).not.toHaveBeenCalled();
-    expect(response.bodyUsed).toBe(false);
+    expect(cancelBody).toHaveBeenCalledOnce();
     expect(fetch).toHaveBeenCalledOnce();
   });
 
@@ -124,5 +134,21 @@ describe("provider access revocation", () => {
     await expect(result).rejects.toBeInstanceOf(ProviderRateLimitError);
     await expect(result).rejects.toMatchObject({ retryAt: new Date("2026-09-19T12:01:00Z") });
     expect(response.bodyUsed).toBe(false);
+  });
+
+  it("does not return a successful WHOOP grant when the identity request is denied", async () => {
+    quota.unsafe.mockResolvedValueOnce([{ retry_at: null }]).mockResolvedValueOnce([{ retry_at: new Date(Date.now() + 60_000).toISOString() }]);
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json({ access_token: "new-access", refresh_token: "new-refresh" })));
+    await expect(exchangeCode("whoop", "single-use-code", "https://hms.example/callback")).rejects.toBeInstanceOf(ProviderBudgetDeferredError);
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(quota.unsafe).toHaveBeenCalledTimes(2);
+  });
+
+  it("retains rotated revocation tokens if allowance denies the final WHOOP retry", async () => {
+    quota.unsafe.mockResolvedValueOnce([{ retry_at: null }]).mockResolvedValueOnce([{ retry_at: null }]).mockResolvedValueOnce([{ retry_at: new Date(Date.now() + 60_000).toISOString() }]);
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(new Response(null, { status: 401 })).mockResolvedValueOnce(Response.json({ access_token: "rotated-access", refresh_token: "rotated-refresh" })));
+    await expect(revokeProviderAccess("whoop", tokens)).resolves.toMatchObject({ revoked: false, tokens: { accessToken: "rotated-access", refreshToken: "rotated-refresh" } });
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(quota.unsafe).toHaveBeenCalledTimes(3);
   });
 });

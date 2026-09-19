@@ -19,6 +19,9 @@ export default defineConfig({
   expect: { timeout: 20_000 },
   workers: 1,
   retries: 0,
+  // Stop after cleanup of the first failed case; do not interrupt the next
+  // synthetic-account fixture merely to stop an already-failed release run.
+  maxFailures: 1,
   reporter: "list",
   projects: [{ name: "deployed-chromium", use: { channel: "chromium", viewport: { width: 390, height: 844 } } }],
   use: { baseURL, actionTimeout: 20_000, navigationTimeout: 30_000, trace: "off", screenshot: "off" },

@@ -5,6 +5,7 @@ import { callbackUrl, providerConfig } from "@/src/lib/integrations/providers";
 import { seal } from "@/src/lib/integrations/crypto";
 import { lockOwnedSubject, bindActor, rightsDatabase } from "@/src/lib/data-rights/server";
 import { z } from "zod";
+import { providerQuotaConfigured } from "@/src/lib/integrations/request-budget";
 
 export async function GET(request: Request, context: {params: Promise<{provider: string}>}) {
   const session = await authenticatedClient();
@@ -13,7 +14,7 @@ export async function GET(request: Request, context: {params: Promise<{provider:
   const subject = z.uuid().safeParse(new URL(request.url).searchParams.get("profile"));
   if (!provider.success || !subject.success) return Response.redirect(new URL("/more/data?integration=invalid", request.url));
   const config = providerConfig(provider.data);
-  if (!config.clientId || !config.clientSecret || !process.env.INTEGRATION_TOKEN_KEY) return Response.redirect(new URL(`/more/data?profile=${subject.data}&integration=setup`, request.url));
+  if (!config.clientId || !config.clientSecret || !process.env.INTEGRATION_TOKEN_KEY || !providerQuotaConfigured(provider.data)) return Response.redirect(new URL(`/more/data?profile=${subject.data}&integration=setup`, request.url));
   const db = rightsDatabase();
   try { await db.begin(async tx => { await bindActor(tx, session.user.id); await lockOwnedSubject(tx, subject.data, true); }); }
   catch { return Response.redirect(new URL(`/more/data?profile=${subject.data}&integration=denied`, request.url)); }

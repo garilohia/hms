@@ -3,11 +3,12 @@ import { z } from "zod";
 import { addDays, localDay } from "../analytics/time";
 import { normalisedMetric, type NormalisedMetric } from "../ingestion/model";
 import type { IntegrationProvider, StoredTokens } from "./model";
-import { assertIntegrationReady, CommittedIntegrationCooldownError, loadIntegration, markIntegrationSynced, persistIntegrationMetrics, refreshIntegrationTokens, saveIntegrationCooldown } from "./store";
+import { assertIntegrationReady, CommittedIntegrationBudgetError, CommittedIntegrationCooldownError, loadIntegration, markIntegrationSynced, persistIntegrationMetrics, refreshIntegrationTokens, saveIntegrationCooldown } from "./store";
 import { normaliseGoogle } from "./normalise";
 import { advanceSyncVisit, fairSyncCheckpoint, nextSyncVisit, reconciliationComplete, syncCheckpoint, type FairSyncCheckpoint, type SyncCollection } from "./checkpoint";
 import { saveIntegrationCheckpoint } from "./checkpoint-store";
-import { ProviderRateLimitError, providerResponseError } from "./rate-limit";
+import { ProviderRateLimitError } from "./rate-limit";
+import { ProviderBudgetDeferredError, providerRequest } from "./request-budget";
 
 function metric(input: Omit<NormalisedMetric,"duration_s"|"quality"|"external_id"> & Partial<Pick<NormalisedMetric,"duration_s"|"quality"|"external_id">>) {
   return normalisedMetric.safeParse({ duration_s:null, quality:"raw", external_id:null, ...input });
@@ -25,16 +26,14 @@ function syncWindow(timezone: string) {
 }
 type SyncWindow = ReturnType<typeof syncWindow>;
 
-async function googlePage(accessToken:string,type:string,window:SyncWindow,pageToken:string,deadline:number) {
+async function googlePage(accessToken:string,type:string,window:SyncWindow,pageToken:string,deadline:number,beforeRequest:()=>Promise<void>) {
     const url=new URL(`https://health.googleapis.com/v4/users/me/dataTypes/${type}/dataPoints`);
     url.searchParams.set("pageSize",type==="sleep"?"25":type.startsWith("daily-")?"10":"1000");
     const daily = type.startsWith("daily-");
     const field=type==="sleep"?"sleep.interval.end_time":`${type.replaceAll("-","_")}.${daily?"date":["weight","heart-rate"].includes(type)?"sample_time.physical_time":"interval.start_time"}`;
     url.searchParams.set("filter",`${field} >= \"${daily?window.firstDay:window.start}\" AND ${field} < \"${daily?window.nextDay:window.end}\"`);
     if(pageToken)url.searchParams.set("pageToken",pageToken);
-    const response=await fetch(url,{headers:{Authorization:`Bearer ${accessToken}`},cache:"no-store",signal:AbortSignal.timeout(Math.max(1,Math.min(20_000,deadline-Date.now())))});
-    const throttle = providerResponseError(response, "google_health");
-    if (throttle) throw throttle;
+    const response=await providerRequest("google_health",url,{headers:{Authorization:`Bearer ${accessToken}`},cache:"no-store"},deadline,beforeRequest);
     const body=z.object({dataPoints:z.array(z.unknown()).default([]),nextPageToken:z.string().optional()}).safeParse(await response.json().catch(()=>null));
     if(!response.ok||!body.success)throw new Error(`Google Health ${type} sync failed.`);
     return { records: body.data.dataPoints, nextToken: body.data.nextPageToken || "" };
@@ -53,11 +52,9 @@ function collectionsFor(provider: IntegrationProvider, scopes:string[]):SyncColl
   return types;
 }
 
-async function whoopPage(tokens:StoredTokens,path:string,window:SyncWindow,nextToken:string,deadline:number){
+async function whoopPage(tokens:StoredTokens,path:string,window:SyncWindow,nextToken:string,deadline:number,beforeRequest:()=>Promise<void>){
     const url=new URL(`https://api.prod.whoop.com/developer/v2/${path}`);url.searchParams.set("limit","25");url.searchParams.set("start",window.start);url.searchParams.set("end",window.end);if(nextToken)url.searchParams.set("nextToken",nextToken);
-    const response=await fetch(url,{headers:{Authorization:`Bearer ${tokens.accessToken}`},cache:"no-store",signal:AbortSignal.timeout(Math.max(1,Math.min(20_000,deadline-Date.now())))});
-    const throttle = providerResponseError(response, "whoop");
-    if (throttle) throw throttle;
+    const response=await providerRequest("whoop",url,{headers:{Authorization:`Bearer ${tokens.accessToken}`},cache:"no-store"},deadline,beforeRequest);
     const body=z.object({records:z.array(z.unknown()).default([]),next_token:z.string().optional()}).safeParse(await response.json().catch(()=>null));if(!response.ok||!body.success)throw new Error(`WHOOP ${path} sync failed.`);
     return { records: body.data.records, nextToken: body.data.next_token || "" };
 }
@@ -76,7 +73,7 @@ export async function syncIntegration(actor:string,subject:string,provider:Integ
   const result:{inserted:number;skipped:number;complete:boolean;syncedThrough:string|null}={inserted:0,skipped:0,complete:false,syncedThrough:null};
   const connection=await loadIntegration(actor,subject,provider);
   if(Date.now()>=deadline)return result;
-  if(connection.retryAt && connection.retryAt.getTime()>Date.now())throw new ProviderRateLimitError(connection.retryAt);
+  if(connection.retryAt && connection.retryAt.getTime()>Date.now())throw connection.budgetQueued ? new ProviderBudgetDeferredError(connection.retryAt) : new ProviderRateLimitError(connection.retryAt);
   let tokens=connection.tokens,connectionVersion=connection.connectionVersion;
   try {
   if(!validTokens(tokens))({tokens,connectionVersion}=await refreshIntegrationTokens(actor,subject,provider,connectionVersion,deadline));
@@ -109,7 +106,8 @@ export async function syncIntegration(actor:string,subject:string,provider:Integ
     const window=visit.lane==="head"?syncWindow(connection.timezone):checkpoint.window;
     const nextToken=visit.lane==="head"?"":checkpoint.cursors[visit.index].nextToken;
     const fetchDeadline=deadline-pagePersistenceReserveMs;
-    const batch=provider==="google_health"?await googlePage(tokens.accessToken,type,window,nextToken,fetchDeadline):await whoopPage(tokens,type,window,nextToken,fetchDeadline);
+    const ready=()=>assertIntegrationReady(actor,subject,provider,connectionVersion);
+    const batch=provider==="google_health"?await googlePage(tokens.accessToken,type,window,nextToken,fetchDeadline,ready):await whoopPage(tokens,type,window,nextToken,fetchDeadline,ready);
     if(Date.now()>=deadline)return result;
     const metrics=provider==="google_health"?batch.records.flatMap(point=>normaliseGoogle(point,type,connection.timezone)).filter(item=>localDay(item.recorded_at,connection.timezone)>=window.firstDay):normaliseWhoop(batch.records,type);
     if(metrics.length){
@@ -135,7 +133,10 @@ export async function syncIntegration(actor:string,subject:string,provider:Integ
     // vendor failure. Keep the exact page for the next tick rather than adding
     // the generic five-minute error delay. Other network errors still fail.
     if(error instanceof Error && error.name==="TimeoutError" && Date.now()+pagePersistenceReserveMs>=deadline)return result;
-    if(error instanceof ProviderRateLimitError && !(error instanceof CommittedIntegrationCooldownError))await saveIntegrationCooldown(actor,subject,provider,connectionVersion,error.retryAt);
+    if(error instanceof ProviderRateLimitError && !(error instanceof CommittedIntegrationCooldownError) && !(error instanceof CommittedIntegrationBudgetError)){
+      if(error instanceof ProviderBudgetDeferredError)await saveIntegrationCooldown(actor,subject,provider,connectionVersion,error.retryAt,"ProviderBudgetQueued");
+      else await saveIntegrationCooldown(actor,subject,provider,connectionVersion,error.retryAt);
+    }
     throw error;
   }
 }

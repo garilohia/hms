@@ -3,8 +3,13 @@ import type { StoredTokens } from "@/src/lib/integrations/model";
 import { fairSyncCheckpoint, type SyncCheckpoint } from "@/src/lib/integrations/checkpoint";
 
 vi.mock("server-only", () => ({}));
+vi.mock("@/src/lib/data-rights/server", () => ({ rightsDatabase: () => ({
+  unsafe: async (sql: string, values: unknown[]) => [{ retry_at: sql.includes("defer_provider_requests") ? values[2] : null }],
+  end: async () => undefined,
+}) }));
 vi.mock("@/src/lib/integrations/store", async importOriginal => ({
   CommittedIntegrationCooldownError: (await importOriginal<typeof import("@/src/lib/integrations/store")>()).CommittedIntegrationCooldownError,
+  CommittedIntegrationBudgetError: (await importOriginal<typeof import("@/src/lib/integrations/store")>()).CommittedIntegrationBudgetError,
   loadIntegration: vi.fn(),
   markIntegrationSynced: vi.fn(),
   persistIntegrationMetrics: vi.fn(),
@@ -38,6 +43,8 @@ describe("provider sync completeness", () => {
     vi.setSystemTime(new Date(now));
     vi.clearAllMocks();
     savedCheckpoint = null;
+    vi.stubEnv("GOOGLE_HEALTH_QUOTA_PROJECT_ID", "hms-test-project");
+    vi.stubEnv("WHOOP_CLIENT_ID", "test-whoop-client");
     vi.mocked(saveIntegrationCheckpoint).mockImplementation(async (_actor, _subject, _provider, _version, expected, next) => {
       expect(expected).toEqual(savedCheckpoint);
       savedCheckpoint = next;
@@ -46,7 +53,7 @@ describe("provider sync completeness", () => {
     vi.mocked(assertIntegrationReady).mockReset().mockResolvedValue(undefined);
     vi.mocked(saveIntegrationCooldown).mockReset().mockResolvedValue(undefined);
   });
-  afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
+  afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); vi.useRealTimers(); });
 
   it("imports Google readings uploaded hours late despite a recent successful sync", async () => {
     connection([`${googleScope}health_metrics_and_measurements.readonly`]);
@@ -323,7 +330,7 @@ describe("provider sync completeness", () => {
   it("rechecks a concurrently established cooldown before the next page", async () => {
     connection(["read:sleep"]);
     vi.stubGlobal("fetch", vi.fn(async () => Response.json({ records: [], next_token: "next-page" })));
-    vi.mocked(assertIntegrationReady).mockResolvedValueOnce(undefined).mockRejectedValueOnce(new ProviderRateLimitError(new Date(Date.parse(now) + 900_000)));
+    vi.mocked(assertIntegrationReady).mockResolvedValueOnce(undefined).mockResolvedValueOnce(undefined).mockRejectedValueOnce(new ProviderRateLimitError(new Date(Date.parse(now) + 900_000)));
     await expect(syncIntegration("actor", "subject", "whoop")).rejects.toBeInstanceOf(ProviderRateLimitError);
     expect(fetch).toHaveBeenCalledOnce();
     expect(checkpoint()?.cursors[0].nextToken).toBe("next-page");
