@@ -1,16 +1,39 @@
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { createClient } from "@supabase/supabase-js";
 import { BlobReader, TextWriter, Uint8ArrayWriter, ZipReader } from "@zip.js/zip.js";
-import { expect, test } from "@playwright/test";
-import { DOCUMENT_BUCKET } from "../../src/lib/data-rights/documents";
+import { expect, test, type Request as BrowserRequest } from "@playwright/test";
+import { checkedDocumentPath, DOCUMENT_BUCKET } from "../../src/lib/data-rights/documents";
 import { liveFixtures, noMobileOverflow } from "./live-fixtures";
 
 const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=", "base64");
 test("golden 5: three CSV readings, private original document, full ZIP and hard account deletion", async ({ page, browser, baseURL }, testInfo) => {
   const fx = liveFixtures(baseURL!), otherContext = await browser.newContext({ viewport: { width: 390, height: 844 } });
   let path: string | undefined;
+  let patientSubject: string | undefined;
+  const failures: unknown[] = [];
+  const testStarted = Date.now();
+  type Timing = { method: string; pathname: string; startedAfterMs: number; status?: number; headersAfterMs?: number; completedAfterMs?: number; failedAfterMs?: number };
+  const timings = new Map<BrowserRequest, Timing>();
+  page.on("request", request => {
+    const pathname = new URL(request.url()).pathname;
+    if (pathname === "/api/documents" || pathname === "/api/patient/view") timings.set(request, { method: request.method(), pathname, startedAfterMs: Date.now() - testStarted });
+  });
+  page.on("response", response => {
+    const timing = timings.get(response.request());
+    if (timing) { timing.status = response.status(); timing.headersAfterMs = Date.now() - testStarted - timing.startedAfterMs; }
+  });
+  page.on("requestfinished", request => {
+    const timing = timings.get(request);
+    if (timing) timing.completedAfterMs = Date.now() - testStarted - timing.startedAfterMs;
+  });
+  page.on("requestfailed", request => {
+    const timing = timings.get(request);
+    if (timing) timing.failedAfterMs = Date.now() - testStarted - timing.startedAfterMs;
+  });
   try {
-    const patient = await fx.actor(page, "Sample data-rights patient"), otherPage = await otherContext.newPage();
+    const patient = await fx.actor(page, "Sample data-rights patient");
+    patientSubject = patient.subject;
+    const otherPage = await otherContext.newPage();
     const other = await fx.actor(otherPage, "Sample unrelated account");
     const times = [3, 2, 1].map(days => new Date(Date.now() - days * 86400000).toISOString().slice(0, 10) + "T12:00:00.000Z");
     const csv = "timestamp,metric_type,value,unit\n" + times.map((time, i) => `${time},weight_kg,${70 + i},kg`).join("\n") + "\n";
@@ -78,10 +101,37 @@ test("golden 5: three CSV readings, private original document, full ZIP and hard
     expect((await publicClient.rpc("hms_list_profiles")).error).not.toBeNull();
     expect((await page.request.get("/api/account/export")).status()).toBe(401);
     expect(fx.errors).toEqual([]);
+  } catch (error) {
+    failures.push(error);
   } finally {
     testInfo.setTimeout(testInfo.timeout + 60000);
-    if (path) { const result = await fx.admin.storage.from(DOCUMENT_BUCKET).remove([path]); if (result.error) throw new Error("Synthetic document cleanup failed."); }
-    await otherContext.close(); await fx.cleanup();
+    // Stop browser requests, then let Auth deletion serialise behind any upload
+    // holding this profile's lock. Purge its exact Storage prefix afterwards,
+    // including an upload that completed before the test captured its path.
+    for (const close of [() => page.close(), () => otherContext.close(), () => fx.cleanup()]) {
+      try { await close(); } catch (error) { failures.push(error); }
+    }
+    if (patientSubject) {
+      try {
+        let empty = false;
+        for (let pageIndex = 0; pageIndex < 10; pageIndex++) {
+          const listed = await fx.admin.storage.from(DOCUMENT_BUCKET).list(patientSubject, { limit: 100, offset: 0 });
+          if (listed.error) throw new Error("Synthetic document prefix listing failed.", { cause: listed.error });
+          if (!listed.data.length) { empty = true; break; }
+          const paths = listed.data.map(object => checkedDocumentPath(patientSubject!, patientSubject + "/" + object.name));
+          const removed = await fx.admin.storage.from(DOCUMENT_BUCKET).remove(paths);
+          if (removed.error) throw new Error("Synthetic document prefix cleanup failed.", { cause: removed.error });
+        }
+        if (!empty) throw new Error("Synthetic document cleanup exceeded its bounded page limit.");
+      } catch (error) { failures.push(error); }
+    }
+    try {
+      const timingPath = testInfo.outputPath("document-request-timings.json");
+      await writeFile(timingPath, JSON.stringify([...timings.values()], null, 2));
+      await testInfo.attach("document-request-timings", { path: timingPath, contentType: "application/json" });
+    } catch (error) { failures.push(error); }
+    if (failures.length === 1) throw failures[0];
+    if (failures.length) throw new AggregateError(failures, "Data-rights verification or synthetic cleanup failed.");
   }
 });
 

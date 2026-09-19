@@ -10,6 +10,8 @@ The 18 September Realtime follow-up passed `npm run check` (136 unit tests), `np
 
 The 19 September provider/notification follow-up adds resumable late-reading sync, explicit provider revocation and read-only configuration verification. See `docs/verification/readiness-2026-09-19.md` for the exact current evidence and remaining gates, `docs/PROVIDER_SETUP.md` for credential placement, and `docs/NOTIFICATION_ACCEPTANCE.md` for controlled delivery testing. Do not replace the already configured production encryption key.
 
+Current runtime `ea36c7c` also prevents clinical-summary clicks before hydration and has green hosted quality/database CI. Its full signed-in check had seven passes and four intermittent failures; all four passed in one focused rerun with unchanged deadlines. This is not a clean full production acceptance pass. OQ016 remains open, alongside the sender/physical-device, Preview-access, provider and security/legal launch gates.
+
 ## What works
 
 1. The existing Next.js 16.3.4 App Router scaffold, strict TypeScript, Tailwind, npm lockfile and Supabase SSR helpers are retained. The nonexistent-todos demo is removed. Public/secret Supabase key names match the supplied project.

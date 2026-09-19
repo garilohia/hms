@@ -44,10 +44,22 @@
 - The first old-deployment script-gated attempt hit a cleanup-order error (`Route is already handled`) and is not valid red proof. The test now drains held continuations before removing interception. Final deployed verification follows after release.
 - Corrected deterministic red run against the unchanged `0ce788b` deployment: one failure in 57.4 seconds, specifically expected disabled/received enabled for Save current summary snapshot while scripts were held. Cleanup succeeded. Together with the local green result, this confirms the pre-hydration interaction regression without extending timeouts.
 
+## Final runtime and acceptance evidence
+
+- Runtime commit `ea36c7c963691abf06cb6fbd31c99ac9b1d1a254` was pushed. GitHub Actions `35436719353` passed quality and from-scratch database replay before promotion.
+- Deployment `dpl_9Xg88QxvZhyrMUFfvkPCGQTskgzD` completed its build in 29.533 seconds, is Ready, and has function region `bom1`. The public alias was inspected and resolves to this runtime. No deployment changed during either signed-in run below.
+- Full command: `HMS_DEPLOYMENT_URL=https://hms-indol-psi.vercel.app HMS_DEPLOYED_ENV_FILE=.env.local HMS_DEPLOYED_SUITE=golden HMS_PDFTOTEXT=/Users/gari/.cache/codex-runtimes/codex-primary-runtime/dependencies/native/poppler/poppler/bin/pdftotext FONTCONFIG_FILE=/Users/gari/.cache/codex-runtimes/codex-primary-runtime/dependencies/native/poppler/poppler/etc/fonts/fonts.conf npx playwright test --config playwright.deployed.config.ts --output test-results/deployed-golden-ea36c7c`.
+- Result: seven passed, four failed in 8.9 minutes. Both doctor paths and guardian conversion/PDF pass, including the deterministic hydration gate. Failures: document-added confirmation (20 seconds), wearable-page navigation (30 seconds), patient summary refresh (30 seconds), History invalidation (15 seconds). Patient logs include browser `ERR_TIMED_OUT`; the error-level Vercel log query reported zero records, which does not prove absence of a request/network failure.
+- Focused command: `HMS_DEPLOYMENT_URL=https://hms-indol-psi.vercel.app HMS_DEPLOYED_ENV_FILE=.env.local HMS_DEPLOYED_SUITE=golden npx playwright test --config playwright.deployed.config.ts data-rights.spec.ts integrations.spec.ts patient.spec.ts realtime.spec.ts --grep 'golden 5|wearable hub|golden 2|Today, History' --output test-results/deployed-ea36c7c-focused`.
+- Focused result: all four passed in 1.1 minutes on the same runtime, without timeout/assertion changes. This does not erase the full-run failures. OQ016 remains open for intermittent latency; no stable live-delivery service level is claimed.
+- Test hygiene: removed one confirmed, test-created 1×1 PNG orphan after its synthetic profile was deleted, and verified that exact prefix empty. No user file was touched; the PNG can be regenerated from the test fixture. Failed-upload cleanup now deletes only the known synthetic prefix after Auth/profile cleanup, with bounded listing and error preservation. Added sanitised request-timing attachments, subsequently made persistent JSON files for future runs; headers, query strings, tokens and request/response bodies are excluded.
+- Scheduled responses at 10:22, 10:23 and 10:24 UTC were HTTP 200 with `timed_out=false` after promotion.
+- Final public/boundary command: `HMS_DEPLOYMENT_URL=https://hms-indol-psi.vercel.app npx playwright test --config playwright.deployed.config.ts --output test-results/deployed-public-ea36c7c`: all nine pass in 13.2 seconds. Final local `npm run check` again passes lint, strict types, contrast and 210 tests.
+
 ## Remaining launch gates
 
 Real sender-domain/inbox and physical-device push acceptance; Supabase SMTP/magic-link email receipt; isolated Preview completion; real provider application approval, client credentials, expiry/revocation and device-delay acceptance; clinician/legal sign-off; compiled native clients and physical-device acceptance remain outstanding. The latter stays outside this web implementation scope.
 
-OQ017's supported pg_net privilege-hardening decision and password-auth exposure review remain security gates; the drafted support request has not been sent.
+OQ016's intermittent hosted acceptance failures, and OQ017's supported pg_net privilege-hardening decision and password-auth exposure review, remain gates; the drafted support request has not been sent.
 
 Dense seven-day reconciliation can take many ticks. Fair fresh/reconciliation lanes, per-user/metric capacity, provider quotas and load tests are still required before advertising minute-level wearable delivery. Passing the tests above is not clinical approval or evidence of a live wearable service level.
