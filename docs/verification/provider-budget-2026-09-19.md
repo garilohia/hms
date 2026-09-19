@@ -20,7 +20,15 @@
 - The caregiver timing attachment reports its `/more/alerts` document returned 200, with headers after 413 milliseconds and completion after 453 milliseconds. Its 390-pixel alert screenshot was inspected. This is local-server evidence, not a fix or latency guarantee for the previous hosted failure.
 - Final review then hardened the wrapper against caller mutation of a validated URL object during awaited admission. Its regression passes in the final 366-test gate and the build was repeated. This change does not enable real OAuth in the browser fixtures; authorised provider acceptance remains outstanding.
 - Deployment dry-run inspection selected 421 files/6,240,865 bytes at that point, with zero private credential, test-result, design-PNG or TypeScript-cache matches. Later edits were source/documentation only. No source was uploaded by the dry run.
-- Release evidence follows after commit and CI; hosted signed-in acceptance remains OQ016 and is not being repeatedly rerun until green.
+- Final-build hub check: `HMS_TEST_PORT=3112 npm run golden:verify -- integrations.spec.ts --max-failures=1 --output test-results/quota-final-hub` passes (one test, 13.8 seconds including setup).
+
+## Release
+
+- Pushed runtime `16652ad489d0e29e608090ba6259de2d5b23c87c`. Both GitHub Actions jobs passed in [run 35440701188](https://github.com/garilohia/hms/actions/runs/35440701188): quality 1m35s, database 48s.
+- Vercel deployment `dpl_8J3Nq59EKmCnLEQLC76c2uVaqaco` became Ready in `bom1`. Its exact Git revision/project were verified before `vercel promote dpl_8J3Nq59EKmCnLEQLC76c2uVaqaco --scope gari4 --yes`; inspecting `https://hms-indol-psi.vercel.app` afterwards resolved the same deployment. No environment values were changed.
+- `HMS_DEPLOYMENT_URL=https://hms-indol-psi.vercel.app npx playwright test --config playwright.deployed.config.ts --output test-results/deployed-public-16652ad`: all nine pass in 25.4 seconds on the promoted runtime.
+- The actual scheduled HTTP response at 11:42:00 UTC on 19 September, after promotion, was 200 with `timed_out=false`. This proves a successful dispatch, not provider ingestion or real notification receipt.
+- Hosted signed-in acceptance remains OQ016. It was not rerun to mask the previous failure; no clean full hosted run is claimed for this revision. Subsequent edits to this report and PROGRESS are documentation only and do not change the deployed application.
 
 ## Still required
 
