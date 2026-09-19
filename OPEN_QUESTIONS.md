@@ -34,6 +34,7 @@
 - Recovery update: the founder restored Resend settings and authorised replacement VAPID keys on 18 September. A new pair was validated and stored in Production only, with the private key marked sensitive and the production HTTPS origin as VAPID subject. The old pair was not recovered. Existing devices must Disable then Enable instant alerts to subscribe with the new public key. Real inbox/device delivery remains unverified; configuration restoration is not delivery evidence.
 - Test real email only with an authorised recipient and confirm the configured sender/domain is verified. Sample data always remains stubbed. Monitor failed and exhausted delivery rows before launch.
 - Web Push subscription storage, recipient rechecks and transport are implemented, but production delivery still needs a physical-device test using the configured VAPID pair. SMS and WhatsApp remain stubs.
+- Read-only configuration and controlled acceptance steps are in `docs/NOTIFICATION_ACCEPTANCE.md`. `npm run notifications:verify` and the authenticated deployed diagnostic distinguish configuration from actual receipt; neither sends a notification.
 
 ## OQ005 — History timezone changes after import
 
@@ -67,7 +68,7 @@
 
 ## OQ011 — Vercel preview environment parity
 
-- A separate free Mumbai project, `hms-preview` (`eqrlycvveqfypalipssq`), was created in the existing garilohia organisation with founder approval after a $0/month quote. All 41 migrations and 25 public device catalogue rows are installed; every public table has RLS and no patient records were copied.
+- A separate free Mumbai project, `hms-preview` (`eqrlycvveqfypalipssq`), was created in the existing garilohia organisation with founder approval after a $0/month quote. All 42 migrations (through 0041) and 25 public device catalogue rows are installed; every public table has RLS and no patient records were copied.
 - Preview has its own public Supabase URL/key and consent salt, with no production database/server credentials. Still needed: staging server key and database credentials, private Storage setup, synthetic persona/doctor seeding, Auth redirect/Preview origin configuration, deployment and deployed tests. The connected tool exposes only publishable keys; the dashboard browser is awaiting founder sign-in. Preview is not yet operational.
 - Follow-up: the founder signed in, but that browser account shows a different organisation and Supabase explicitly denies access to `eqrlycvveqfypalipssq`. Switch to the existing account with garilohia organisation access. Do not create another project/account or substitute the unrelated organisation.
 
@@ -76,6 +77,8 @@
 - Register production OAuth clients for Google Health and WHOOP, approve their consent screens, and add the exact local and production callback URLs before enabling their Connect buttons. No provider accounts, terms or credentials were created by this build.
 - Garmin live linking requires acceptance into the Garmin Connect Developer Program and a commercial licence decision. Ultrahuman multi-user access requires partner approval. Owners, fees, allowed data, deletion/revocation duties and launch availability remain unresolved.
 - A live Apple Watch background connection requires a native iOS HealthKit bridge and App Store privacy review. The launch web architecture intentionally supports Apple Health export instead.
+- On 19 September, the missing production `INTEGRATION_TOKEN_KEY` was generated and stored as a sensitive Vercel value after confirming there were no provider connections. It was not printed, written into the repository or substituted for provider client credentials. Do not rotate it after real grants exist without a migration/reconnection plan.
+- See `docs/PROVIDER_SETUP.md` for exact callbacks, implemented scopes, credential placement and account-acceptance steps. Resumable seven-day sync and revocation are correctness foundations, not live-provider acceptance. Dense history can take tens of minutes; fair fresh-data/reconciliation scheduling, per-user/metric capacity, documented quotas and real-device delay tests must precede a one-minute claim. WHOOP's default daily quota cannot support three users polling all three collections every minute without a different approved strategy.
 
 ## OQ013 — Cycle-phase shading is not covered by DESIGN.md
 

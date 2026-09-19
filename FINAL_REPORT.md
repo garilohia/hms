@@ -1,12 +1,14 @@
-# HMS build handoff — updated 18 September 2026
+# HMS build handoff — updated 19 September 2026
 
 ## Status: M0–M8 complete; native server foundation added
 
 All nine original milestones are implemented. Subsequent work adds versioned native ingestion, bearer-token authentication, immutable retry receipts, measured latency/freshness, timezone re-bucketing and verified private Realtime invalidations. It does not claim signed native binaries, vendor approval, a supervised pilot or clinical/legal approval.
 
-The original large streaming-import and shorter verification matrix evidence remains below. The linked Vercel project and production site now exist at `https://hms-indol-psi.vercel.app`, but Preview does not yet have deliberate public Supabase configuration. Staging must not silently use production health data.
+The original large streaming-import and shorter verification matrix evidence remains below. The linked Vercel project and production site now exist at `https://hms-indol-psi.vercel.app`. The isolated Mumbai Preview database and separate public Supabase settings also exist, but Preview still lacks its server/database credentials, Storage, synthetic fixtures, Auth/origin setup and deployed acceptance. Staging must not silently use production health data.
 
 The 18 September Realtime follow-up passed `npm run check` (136 unit tests), `npm run build` (55 routes) and all five patient/doctor/Realtime golden tests. Live History updates preserve the selected page and reading, and chat recovers messages sent during browser network interruption. These checks used a local production build against the real Supabase project with synthetic fixtures; they do not establish the currently deployed commit. See PROGRESS.md for the earlier full verification matrix and this follow-up's exact commands.
+
+The 19 September provider/notification follow-up adds resumable late-reading sync, explicit provider revocation and read-only configuration verification. See `docs/verification/readiness-2026-09-19.md` for the exact current evidence and remaining gates, `docs/PROVIDER_SETUP.md` for credential placement, and `docs/NOTIFICATION_ACCEPTANCE.md` for controlled delivery testing. Do not replace the already configured production encryption key.
 
 ## What works
 

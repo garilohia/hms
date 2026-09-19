@@ -27,6 +27,7 @@ export function normaliseGoogle(raw:unknown,type:string,timezone:string):Normali
   }
   if(!recordedAt)return[];
   const mappings:Record<string,[NormalisedMetric["metric_type"],string,string,number?]>={
+    "heart-rate":["heart_rate","beatsPerMinute","bpm"],
     "daily-resting-heart-rate":["resting_heart_rate","beatsPerMinute","bpm"],"daily-heart-rate-variability":["hrv_rmssd","averageHeartRateVariabilityMilliseconds","ms"],
     "daily-oxygen-saturation":["spo2","averagePercentage","%"],"daily-respiratory-rate":["respiratory_rate","breathsPerMinute","breaths/min"],
     "daily-sleep-temperature-derivations":["skin_temperature","nightlyTemperatureCelsius","°C"],"daily-vo2-max":["vo2max","vo2Max","mL/kg/min"],

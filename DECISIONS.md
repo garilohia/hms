@@ -286,3 +286,17 @@ History invalidations retain the active date range and pagination cursor. Refres
 ## D037 — Run Vercel functions alongside the Mumbai database
 
 Production was using Vercel's Washington (`iad1`) default while Supabase is in Mumbai. Configure the single function region as `bom1` in `vercel.json`, for both production and isolated Preview, to remove unnecessary intercontinental database round trips. Keep the existing provider, free single-region plan, database location, job bounds and test deadlines. Next.js 16.3.4 deprecates `preferredRegion`, so use platform configuration rather than route exports. Deployment region and the full deployed golden suite must be verified before claiming the latency issue resolved.
+
+## D038 — Resumable provider sync and explicit revocation state
+
+Google Health and WHOOP filter by observation/session time, so a five-minute overlap can miss a phone's late upload or a later-scored sleep. Reconcile the latest seven days using a frozen window and a validated, private JSON checkpoint (migration 0041). Persist each page through canonical ingestion before advancing its checkpoint; interrupted writes replay safely through deduplication. Compare both the connection's encrypted-token version and expected checkpoint, and do not report a complete sweep while pages remain. The existing hand-authored private integration table is not part of the declarative Drizzle schema; this is a custom migration, not a second declaration of that table.
+
+Runs have page and time budgets so history cannot monopolise the minute dispatcher. Dense histories can still take many runs. This correctness fix is not a measured one-minute service level; fair fresh-data/reconciliation scheduling, provider quotas and real-account load acceptance remain OQ012. Intraday Google heart rate retains its original observation time and unknown rest context; it is not relabelled resting heart rate.
+
+Disconnect commits the local stop before contacting the vendor. A bounded revocation attempt runs outside patient/database locks; failure retains encrypted credentials only for retry and exposes a pending-removal state. A short lease and conditional completion prevent an old attempt from removing a replacement connection. Reconnect is blocked until pending removal is resolved; manual confirmation is explicitly labelled as removal performed in provider settings. Callback exchange and refresh serialise against disconnect so rotating credentials cannot escape the revocation snapshot. Previously imported history is retained.
+
+## D039 — Configuration verification is not notification delivery
+
+Add a redacted, read-only notification checker with an explicit environment-file option and no implicit local fallback. It validates VAPID key correspondence, contact and sender syntax; an optional GET-only Resend check verifies sender-domain metadata where the key permits it. Never broaden a sending key's permissions solely for this check.
+
+Sensitive Vercel values are not downloadable, and its local environment runner may merge local credentials. The existing cron-authenticated tick route therefore accepts exactly one `check=notifications` query to inspect the deployed configuration without database access or dispatch. Invalid/duplicate diagnostic queries fail closed rather than falling into normal work. All diagnostics say that domain/inbox/physical-device delivery remains unverified. Real test messages require an agreed recipient and device; sample health alerts remain stubbed.

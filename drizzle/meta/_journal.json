@@ -288,6 +288,13 @@
       "when": 1789200180000,
       "tag": "0040_consult_live_messages",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1789810440345,
+      "tag": "0041_integration_sync_checkpoint",
+      "breakpoints": true
     }
   ]
 }

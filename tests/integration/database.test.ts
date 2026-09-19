@@ -3,6 +3,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import postgres from "postgres";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { normaliseApple } from "../../src/lib/ingestion/apple-normalise";
+import { normaliseGoogle } from "../../src/lib/integrations/normalise";
 import { PostgresSummaryStore } from "../../src/lib/jobs/summary-store";
 import { runSummaryJobs } from "../../src/lib/jobs/summary-runner";
 import { PostgresDeliveryStore } from "../../src/lib/alerts/delivery-store";
@@ -71,6 +72,43 @@ describe("real Postgres: migrations, authentication guard, RLS and audited acces
     const tables=await q("select relname,relrowsecurity from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname=$1 and c.relkind='r'",[schema]);
     expect(tables).toHaveLength(24);
     expect(tables.every(t => t.relrowsecurity)).toBe(true);
+  });
+  it.each(["anon", "authenticated"])("keeps private wearable checkpoints inaccessible to %s", async role => {
+    const [column] = await q("select data_type from information_schema.columns where table_schema=$1 and table_name='integration_connections' and column_name='sync_checkpoint'", [privateSchema]);
+    expect(column.data_type).toBe("jsonb");
+    await q("SET LOCAL ROLE " + role);
+    await expect(q('select sync_checkpoint from "' + privateSchema + '".integration_connections')).rejects.toMatchObject({ code: "42501" });
+  });
+  it("rejects stale checkpoint writes after cursor advancement, token replacement or disconnect", async () => {
+    const wearableSource = randomUUID();
+    await q("insert into " + t("data_sources") + "(id,user_id,provider) values($1,$2,'whoop_api')", [wearableSource, subjects.alice]);
+    await q('insert into "' + privateSchema + '".integration_connections(user_id,provider,source_id,external_account_id,encrypted_tokens) values($1,\'whoop\',$2,\'fixture\',\'version-1\')', [subjects.alice, wearableSource]);
+    const cursor = JSON.stringify({ version: 1, nextToken: "page-2" });
+    const next = JSON.stringify({ version: 1, nextToken: "page-3" });
+    const compareAndSwap = (version: string, expected: string | null, value: string) => q('update "' + privateSchema + '".integration_connections c set sync_checkpoint=$1::text::jsonb from ' + t("data_sources") + " s where c.user_id=$2 and c.provider='whoop' and c.encrypted_tokens=$3 and c.sync_checkpoint is not distinct from $4::text::jsonb and s.id=c.source_id and s.user_id=c.user_id and s.status='connected' returning c.user_id", [value, subjects.alice, version, expected]);
+    expect(await compareAndSwap("version-1", null, cursor)).toHaveLength(1);
+    expect(await compareAndSwap("version-1", null, next)).toHaveLength(0);
+    await q('update "' + privateSchema + '".integration_connections set encrypted_tokens=\'version-2\' where user_id=$1', [subjects.alice]);
+    expect(await compareAndSwap("version-1", cursor, next)).toHaveLength(0);
+    await q("update " + t("data_sources") + " set status='disconnected' where id=$1", [wearableSource]);
+    expect(await compareAndSwap("version-2", cursor, next)).toHaveLength(0);
+    const [row] = await q('select sync_checkpoint from "' + privateSchema + '".integration_connections where user_id=$1', [subjects.alice]);
+    expect(row.sync_checkpoint).toEqual(JSON.parse(cursor));
+  });
+  it("roundtrips serialised provider metadata and normalised metric pages as JSON objects", async () => {
+    await actAs(actors.alice);
+    await q("select " + fn("record_consent") + "($1,'data_ingestion',true,'test',$2)", [subjects.alice, hash]);
+    await owner();
+    const wearableSource = randomUUID();
+    const metadata = { label: "Google Health", connection: "oauth" };
+    await q("insert into " + t("data_sources") + "(id,user_id,provider,source_key,metadata) values($1,$2,'google_health_api','root:oauth:google_health',$3::text::jsonb)", [wearableSource, subjects.alice, JSON.stringify(metadata)]);
+    const page = normaliseGoogle({ heartRate: { sampleTime: { physicalTime: "2026-09-18T08:00:00Z" }, beatsPerMinute: "72" } }, "heart-rate", "UTC");
+    const [result] = await q("select " + fn("ingest_batch") + "($1,$2,$3::text::jsonb) result", [subjects.alice, wearableSource, JSON.stringify(page)]);
+    expect(result.result).toEqual({ inserted: 1, skipped: 0 });
+    const [stored] = await q("select metadata from " + t("data_sources") + " where id=$1", [wearableSource]);
+    expect(stored.metadata).toEqual(metadata);
+    const [reading] = await q("select metric_type,value::text from " + t("metrics") + " where source_id=$1", [wearableSource]);
+    expect(reading).toEqual({ metric_type: "heart_rate", value: "72" });
   });
   it("permits A to see their metric but B cannot read A's data", async () => {
     await actAs(actors.alice);

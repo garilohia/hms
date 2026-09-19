@@ -6,12 +6,24 @@ import { createDeliveryStore } from "@/src/lib/alerts/delivery-store";
 import { dispatchAlerts } from "@/src/lib/alerts/dispatch";
 import { emailTransport, pushTransport, routedTransport } from "@/src/lib/alerts/transport";
 import { syncDueIntegrations } from "@/src/lib/integrations/scheduled";
+import { inspectNotificationConfig } from "@/src/lib/alerts/notification-config";
 export const runtime = "nodejs";
 export const maxDuration = 120;
 export async function POST(request: Request) {
   const headers = { "Cache-Control": "no-store" };
   if (!process.env.CRON_SECRET || process.env.CRON_SECRET.length < 32 || !process.env.DATABASE_URL) return Response.json({ error: "Scheduler is not configured." }, { status: 503, headers });
   if (!cronAuthorised(request.headers.get("authorization"), process.env.CRON_SECRET)) return Response.json({ error: "Unauthorised." }, { status: 401, headers });
+  // Inspect deployed secrets without retrieving them or dispatching any work.
+  // Both methods authenticate first; normal scheduled requests are unchanged.
+  const diagnostic = new URL(request.url).searchParams.getAll("check");
+  if (diagnostic.length) {
+    if (diagnostic.length !== 1 || diagnostic[0] !== "notifications") return Response.json({ error: "Unsupported configuration check." }, { status: 400, headers });
+    const checks = inspectNotificationConfig({ RESEND_API_KEY: process.env.RESEND_API_KEY, EMAIL_FROM: process.env.EMAIL_FROM,
+      NEXT_PUBLIC_VAPID_PUBLIC_KEY: process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY: process.env.VAPID_PRIVATE_KEY,
+      VAPID_SUBJECT: process.env.VAPID_SUBJECT });
+    return Response.json({ checks, localConfigurationValid: checks.every(check => check.status === "pass"),
+      senderDomainVerified: false, deliveryVerified: false, notificationsSent: 0 }, { headers });
+  }
   const db = postgres(process.env.DATABASE_URL, { max: 2, prepare: false, connect_timeout: 5, connection: { statement_timeout: 10000 } });
   try {
     // Deadlines get priority over a large historical import backlog.

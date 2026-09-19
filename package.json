@@ -30,6 +30,7 @@
     "cron:setup": "tsx scripts/setup-cron.ts",
     "storage:setup": "tsx scripts/setup-storage.ts",
     "alerts:verify": "playwright test --config playwright.alerts.config.ts",
+    "notifications:verify": "tsx scripts/verify-notification-config.ts",
     "golden:verify": "playwright test --config playwright.golden.config.ts",
     "pdf:verify": "tsx scripts/verify-clinical-pdf.ts",
     "design:audit": "playwright test --config playwright.design.config.ts"

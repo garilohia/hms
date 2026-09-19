@@ -6,6 +6,7 @@ export type IntegrationProvider = z.infer<typeof integrationProvider>;
 export type IntegrationStatus = {
   provider: IntegrationProvider;
   connected: boolean;
+  revocationPending?: boolean;
   configured: boolean;
   lastSyncAt: string | null;
   label: string;
