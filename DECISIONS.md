@@ -300,3 +300,9 @@ Disconnect commits the local stop before contacting the vendor. A bounded revoca
 Add a redacted, read-only notification checker with an explicit environment-file option and no implicit local fallback. It validates VAPID key correspondence, contact and sender syntax; an optional GET-only Resend check verifies sender-domain metadata where the key permits it. Never broaden a sending key's permissions solely for this check.
 
 Sensitive Vercel values are not downloadable, and its local environment runner may merge local credentials. The existing cron-authenticated tick route therefore accepts exactly one `check=notifications` query to inspect the deployed configuration without database access or dispatch. Invalid/duplicate diagnostic queries fail closed rather than falling into normal work. All diagnostics say that domain/inbox/physical-device delivery remains unverified. Real test messages require an agreed recipient and device; sample health alerts remain stubbed.
+
+## D040 — Clinical-summary controls wait for hydration
+
+A full navigation can render the clinical summary before its client event listeners attach. Snapshot, range and medication controls must remain disabled during that interval, then retain the existing busy-state guard. Use React's server/client external-store snapshots to represent hydration without a timer or changing summary, PDF, consent or audit semantics. The server-generated PDF link remains usable.
+
+The doctor golden path now deliberately holds the page's JavaScript, asserts that those controls are disabled, releases the scripts and executes the existing snapshot/PDF/audited-scope assertions. No application or test deadlines are increased. This follows the [Playwright hydration guidance](https://playwright.dev/docs/navigations#hydration); retrying a click is not a substitute for making the initial UI truthful.

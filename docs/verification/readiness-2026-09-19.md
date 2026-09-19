@@ -27,8 +27,27 @@
 - Production Supabase security advisor reports two warnings: non-relocatable managed `pg_net` extension metadata in `public`, and leaked-password protection disabled. Both databases also have six intentional deny-by-default RLS/no-policy informational notices. Do not describe the advisor as clean. Review [extension guidance](https://supabase.com/docs/guides/database/database-linter?lint=0014_extension_in_public) and [password protection](https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection). No extension was moved/dropped and no paid Auth setting was enabled.
 - Deployed results are recorded below only after completion.
 
+## Hosted verification
+
+- Pushed runtime commit `0ce788b80ff79fcddee358cba17f0cdd3cee6e88`. GitHub Actions run `35435895928` passed both quality and from-scratch database jobs.
+- Remote production build completed in 28.578 seconds. Deployment `dpl_CJniHaw9HhqUcMPHY1PSQfgr87S6` is Ready, Next.js 16.3.4, function region `bom1`. Promoted it and verified the production alias `https://hms-indol-psi.vercel.app` resolves to that deployment/commit.
+- `HMS_DEPLOYMENT_URL=https://hms-indol-psi.vercel.app npx playwright test --config playwright.deployed.config.ts`: all nine public/boundary tests pass in 1.5 minutes.
+- Authenticated runtime `check=notifications` returned HTTP 200 with zero notifications sent: VAPID pair and contact pass, Resend key syntax passes, sender fails. Production's available sender configuration is Resend's test sender; an owner's verified sending domain/address is still required. Domain permissions, inbox and physical-device receipt remain unverified.
+- Managed-extension audit: `pg_net` is non-relocatable/managed and not exposed by PostgREST (zero-row probe 406/PGRST106). Its inherited SQL ACLs need supported owner-level hardening, not a blanket revoke that could break the postgres worker/cron. See OQ017. No extension or grant changes were made.
+- The first full signed-in run on `0ce788b` finished with eight passes and three failures in 10.7 minutes: doctor/guardian snapshot confirmations stayed empty; patient onboarding encountered a browser `/api/consents` timeout. No test deadlines were relaxed. Error-level deployment logs contained no matching exception, and the bounded consent-route log sample contained nine 200s plus the expected unauthorised/forbidden probes; these observations do not establish the timeout's cause.
+
+## Summary interaction follow-up
+
+- D040 keeps snapshot/range/medication controls disabled until hydration. PDF navigation, clinical calculations, permissions and existing copy are unchanged.
+- Added a script-gated doctor regression that checks the initial disabled controls before releasing JavaScript, then runs the original snapshot, real-PDF and audited-scope assertions.
+- `HMS_TEST_PORT=3112 npm run golden:verify -- doctor.spec.ts --grep 'golden 3' --output test-results/summary-hydration-green`: one pass in 15.5 seconds on the fixed local production build.
+- The first old-deployment script-gated attempt hit a cleanup-order error (`Route is already handled`) and is not valid red proof. The test now drains held continuations before removing interception. Final deployed verification follows after release.
+- Corrected deterministic red run against the unchanged `0ce788b` deployment: one failure in 57.4 seconds, specifically expected disabled/received enabled for Save current summary snapshot while scripts were held. Cleanup succeeded. Together with the local green result, this confirms the pre-hydration interaction regression without extending timeouts.
+
 ## Remaining launch gates
 
 Real sender-domain/inbox and physical-device push acceptance; Supabase SMTP/magic-link email receipt; isolated Preview completion; real provider application approval, client credentials, expiry/revocation and device-delay acceptance; clinician/legal sign-off; compiled native clients and physical-device acceptance remain outstanding. The latter stays outside this web implementation scope.
+
+OQ017's supported pg_net privilege-hardening decision and password-auth exposure review remain security gates; the drafted support request has not been sent.
 
 Dense seven-day reconciliation can take many ticks. Fair fresh/reconciliation lanes, per-user/metric capacity, provider quotas and load tests are still required before advertising minute-level wearable delivery. Passing the tests above is not clinical approval or evidence of a live wearable service level.

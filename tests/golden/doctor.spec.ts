@@ -2,7 +2,7 @@ import {randomUUID} from "node:crypto";
 import {writeFile} from "node:fs/promises";
 import {createClient} from "@supabase/supabase-js";
 import postgres from "postgres";
-import {expect,test,type Page,type BrowserContext} from "@playwright/test";
+import {expect,test,type Page,type BrowserContext,type Route} from "@playwright/test";
 async function mobile(page:Page){expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBe(390);}
 async function loseFirstSavedResponse(page:Page,action:string) {
   let lost=false;
@@ -13,6 +13,33 @@ async function loseFirstSavedResponse(page:Page,action:string) {
       await route.abort("failed"); // The server committed, but the caller cannot tell.
     }else await route.fallback();
   });
+}
+async function openSummaryBeforeHydration(page:Page) {
+  const href=await page.getByRole("link",{name:"Your clinical summary",exact:true}).getAttribute("href");
+  if(!href)throw new Error("Clinical summary link missing.");
+  let releaseScripts:()=>void=()=>undefined;
+  const scriptsReady=new Promise<void>(resolve=>{releaseScripts=resolve;});
+  const pendingScripts:Promise<void>[]=[];
+  const scriptPattern=/\/_next\/static\/.*\.js(?:\?.*)?$/;
+  const holdScript=(route:Route)=>{
+    const pending=scriptsReady.then(()=>route.continue());
+    pendingScripts.push(pending);
+    return pending;
+  };
+  await page.route(scriptPattern,holdScript);
+  try {
+    // A full private navigation must not expose actionable controls before their listeners exist.
+    await page.goto(href,{waitUntil:"commit"});
+    await expect.poll(()=>pendingScripts.length).toBeGreaterThan(0);
+    await expect(page.getByRole("button",{name:"Save current summary snapshot",exact:true})).toBeDisabled();
+    for(const days of [30,90])await expect(page.getByRole("button",{name:days+" days",exact:true})).toBeDisabled();
+    await expect(page.getByRole("textbox",{name:"Your current list (one per line, up to 12)",exact:true})).toBeDisabled();
+    await expect(page.getByRole("button",{name:"Save reported medications",exact:true})).toBeDisabled();
+  }finally{
+    releaseScripts();
+    // Drain our continuations before removing interception; unroute can otherwise release them twice.
+    try{await Promise.all(pendingScripts);}finally{await page.unroute(scriptPattern,holdScript);}
+  }
 }
 for(const path of [3,4])test(path===3?"golden 3: summary-only doctor, real PDF and audited scope":"golden 4: request, acceptance, both messages and completed note in History",async({page,browser,baseURL},testInfo)=>{
   const {NEXT_PUBLIC_SUPABASE_URL:url,SUPABASE_SECRET_KEY:key,DATABASE_URL:database}=process.env;
@@ -39,7 +66,7 @@ for(const path of [3,4])test(path===3?"golden 3: summary-only doctor, real PDF a
     await page.getByRole("button",{name:"Link "+label+" doctor",exact:true}).click();
     await expect(page.getByRole("status")).toHaveText("Doctor linked with your chosen scope.");await mobile(page);
     if(path===3){
-      await page.getByRole("link",{name:"Your clinical summary",exact:true}).click();await page.getByRole("button",{name:"Save current summary snapshot",exact:true}).click();
+      await openSummaryBeforeHydration(page);await page.getByRole("button",{name:"Save current summary snapshot",exact:true}).click();
       await expect(page.getByRole("status")).toContainText("Snapshot saved.");
       const download=await page.getByRole("link",{name:"Download clinical PDF",exact:true}).getAttribute("href");if(!download)throw new Error("PDF link missing.");expect(download).toContain("snapshot=");
       const patientPdf=await page.request.get(download!);expect(patientPdf.status()).toBe(200);expect(patientPdf.headers()["content-type"]).toBe("application/pdf");expect((await patientPdf.body()).subarray(0,4).toString()).toBe("%PDF");
