@@ -1,6 +1,7 @@
 import "server-only";
 import { z } from "zod";
 import type { IntegrationProvider, StoredTokens } from "./model";
+import { providerResponseError } from "./rate-limit";
 
 type ProviderConfig = {
   label: string;
@@ -69,6 +70,8 @@ export async function refreshAccessToken(provider: IntegrationProvider, current:
   const body = new URLSearchParams({ grant_type: "refresh_token", refresh_token: current.refreshToken, client_id: config.clientId, client_secret: config.clientSecret });
   if (provider === "whoop") body.set("scope", "offline");
   const response = await fetch(config.tokenEndpoint, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" }, body, cache: "no-store", redirect: "error", signal: AbortSignal.timeout(remaining) });
+  const throttle = providerResponseError(response, provider);
+  if (throttle) throw throttle;
   const parsed = z.object({ access_token: z.string().min(1), refresh_token: z.string().min(1).optional(), token_type: z.string().default(current.tokenType), expires_in: z.number().positive().optional() }).safeParse(await response.json().catch(() => null));
   if (!response.ok || !parsed.success) throw new Error(`${config.label} access could not be refreshed.`);
   return { accessToken: parsed.data.access_token, refreshToken: parsed.data.refresh_token || current.refreshToken, tokenType: parsed.data.token_type,

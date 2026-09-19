@@ -1,8 +1,8 @@
 import {randomUUID} from "node:crypto";
-import {expect,test,type BrowserContext} from "@playwright/test";
+import {expect,test,type BrowserContext,type Route} from "@playwright/test";
 import {liveFixtures} from "./live-fixtures";
 
-test("Today, History and consultation chat update without refresh",async({page,browser,baseURL})=>{
+test("Today, History and consultation chat update without refresh",async({page,browser,baseURL},testInfo)=>{
   if(!baseURL)throw new Error("Base URL required.");
   const f=liveFixtures(baseURL);let doctorContext:BrowserContext|undefined;
   try{
@@ -20,11 +20,27 @@ test("Today, History and consultation chat update without refresh",async({page,b
     await expect(page.getByTestId("patient-live-state")).toHaveAttribute("data-live","live",{timeout:20000});
     await f.db.unsafe("update public.daily_summaries set rhr=71,computed_at=now() where user_id=$1 and day=current_date",[patient.subject]);
     await expect(page.getByText("71",{exact:true}).first()).toBeVisible({timeout:15000});
+    await page.screenshot({path:testInfo.outputPath("today-live.png")});
 
     await page.goto(baseURL+"/history?profile="+patient.subject);
     await expect(page.getByTestId("patient-live-state")).toHaveAttribute("data-live","live",{timeout:20000});
-    await f.db.unsafe("update public.daily_summaries set rhr=72,computed_at=now() where user_id=$1 and day=current_date",[patient.subject]);
-    await expect(page.locator(".raw-table tbody tr").filter({hasText:"72"}).first()).toBeVisible({timeout:15000});
+    let historyFaults=0;
+    const interruptFinalPing=async(route:Route)=>{
+      const input=route.request().postDataJSON();
+      if(input.section==="history"&&input.userId===patient.subject&&historyFaults===0){
+        historyFaults++;
+        await route.fulfill({status:503,contentType:"application/json",body:JSON.stringify({error:"Synthetic temporary view interruption."})});
+      }else await route.fallback();
+    };
+    await page.route("**/api/patient/view",interruptFinalPing);
+    try{
+      await f.db.unsafe("update public.daily_summaries set rhr=72,computed_at=now() where user_id=$1 and day=current_date",[patient.subject]);
+      // No further write/ping: the failed invalidation must recover on its own.
+      await expect(page.locator(".raw-table tbody tr").filter({hasText:"72"}).first()).toBeVisible({timeout:15000});
+      expect(historyFaults).toBe(1);
+      await expect(page.getByTestId("patient-live-state")).toHaveAttribute("data-live","live");
+      await page.screenshot({path:testInfo.outputPath("history-recovered.png")});
+    }finally{await page.unroute("**/api/patient/view",interruptFinalPing);}
 
     // A ping must reload the selected page, not replace older history with the latest page.
     await page.getByRole("button",{name:"All",exact:true}).click();

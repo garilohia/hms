@@ -9,6 +9,7 @@ import { runSummaryJobs } from "../../src/lib/jobs/summary-runner";
 import { PostgresDeliveryStore } from "../../src/lib/alerts/delivery-store";
 import { dispatchAlerts } from "../../src/lib/alerts/dispatch";
 import { defaultRules } from "../../src/lib/alerts/rules";
+import { advanceSyncVisit, fairSyncCheckpoint, syncCheckpoint } from "../../src/lib/integrations/checkpoint";
 
 if (!process.env.DATABASE_URL) throw new Error("DATABASE_URL is required for database verification.");
 const db = postgres(process.env.DATABASE_URL, { max: 1, prepare: false, connect_timeout: 10, onnotice() {} });
@@ -94,6 +95,38 @@ describe("real Postgres: migrations, authentication guard, RLS and audited acces
     expect(await compareAndSwap("version-2", cursor, next)).toHaveLength(0);
     const [row] = await q('select sync_checkpoint from "' + privateSchema + '".integration_connections where user_id=$1', [subjects.alice]);
     expect(row.sync_checkpoint).toEqual(JSON.parse(cursor));
+  });
+  it("CAS-upgrades a legacy checkpoint and persists independent v2 metric cursors", async () => {
+    const wearableSource = randomUUID();
+    await q("insert into " + t("data_sources") + "(id,user_id,provider) values($1,$2,'whoop_api')", [wearableSource, subjects.alice]);
+    const legacy = syncCheckpoint.parse({ version: 1, provider: "whoop", window: { start: "2026-09-11T10:00:00.000Z", end: "2026-09-18T10:00:00.000Z", firstDay: "2026-09-11", nextDay: "2026-09-19" }, collections: ["sleep", "recovery", "cycle"], collectionIndex: 1, nextToken: "recovery-page-2" });
+    await q('insert into "' + privateSchema + '".integration_connections(user_id,provider,source_id,external_account_id,encrypted_tokens,sync_checkpoint) values($1,\'whoop\',$2,\'fixture\',\'version-1\',$3::text::jsonb)', [subjects.alice, wearableSource, JSON.stringify(legacy)]);
+    const upgraded = fairSyncCheckpoint(legacy);
+    const compareAndSwap = (expected: unknown, next: unknown) => q('update "' + privateSchema + '".integration_connections c set sync_checkpoint=$1::text::jsonb from ' + t("data_sources") + " s where c.user_id=$2 and c.provider='whoop' and c.encrypted_tokens='version-1' and c.sync_checkpoint is not distinct from $3::text::jsonb and s.id=c.source_id and s.user_id=c.user_id and s.status='connected' returning c.sync_checkpoint", [JSON.stringify(next), subjects.alice, JSON.stringify(expected)]);
+    const [first] = await compareAndSwap(legacy, upgraded);
+    expect(first.sync_checkpoint).toEqual(upgraded);
+    expect(await compareAndSwap(legacy, upgraded)).toHaveLength(0);
+    const next = advanceSyncVisit(upgraded, { lane: "reconciliation", index: 1 }, "recovery-page-3");
+    const [stored] = await compareAndSwap(upgraded, next);
+    expect(stored.sync_checkpoint).toEqual(next);
+    expect(stored.sync_checkpoint.cursors).toEqual([{ complete: true, nextToken: "" }, { complete: false, nextToken: "recovery-page-3" }, { complete: false, nextToken: "" }]);
+    expect(stored.sync_checkpoint.reconciliationIndex).toBe(2);
+  });
+  it("preserves an active provider cooldown through completion and ignores a replaced grant", async () => {
+    const wearableSource = randomUUID();
+    await q("insert into " + t("data_sources") + "(id,user_id,provider) values($1,$2,'whoop_api')", [wearableSource, subjects.alice]);
+    const checkpoint = fairSyncCheckpoint(syncCheckpoint.parse({ version: 1, provider: "whoop", window: { start: "2026-09-11T10:00:00.000Z", end: "2026-09-18T10:00:00.000Z", firstDay: "2026-09-11", nextDay: "2026-09-19" }, collections: ["sleep"], collectionIndex: 1, nextToken: "" }));
+    await q('insert into "' + privateSchema + '".integration_connections(user_id,provider,source_id,external_account_id,encrypted_tokens,sync_checkpoint,next_sync_at,last_error) values($1,\'whoop\',$2,\'fixture\',\'version-1\',$3::text::jsonb,now()+interval \'2 hours\',\'ProviderRateLimited\')', [subjects.alice, wearableSource, JSON.stringify(checkpoint)]);
+    // The production store locks and checks the grant before issuing this update.
+    // Exercise its timestamp/old-row CASE semantics against real Postgres.
+    const [before] = await q('select next_sync_at::text from "' + privateSchema + '".integration_connections where user_id=$1', [subjects.alice]);
+    const [completed] = await q('update "' + privateSchema + '".integration_connections c set next_sync_at=greatest(next_sync_at,now()+interval \'1 minute\'),sync_locked_until=null,sync_checkpoint=null,last_error=case when last_error=\'ProviderRateLimited\' and next_sync_at>now() then last_error else null end where c.user_id=$1 and c.sync_checkpoint is not distinct from $2::text::jsonb returning next_sync_at::text,last_error,sync_checkpoint', [subjects.alice, JSON.stringify(checkpoint)]);
+    expect(completed).toEqual({ next_sync_at: before.next_sync_at, last_error: "ProviderRateLimited", sync_checkpoint: null });
+    await q('update "' + privateSchema + '".integration_connections set encrypted_tokens=\'version-2\' where user_id=$1', [subjects.alice]);
+    expect(await q('select c.last_error,c.next_sync_at::text from "' + privateSchema + '".integration_connections c join ' + t("data_sources") + " s on s.id=c.source_id where c.user_id=$1 and c.encrypted_tokens='version-1' and s.status='connected' and c.provider='whoop' for update of c", [subjects.alice])).toHaveLength(0);
+    await q('update "' + privateSchema + '".integration_connections set next_sync_at=now()-interval \'1 minute\',sync_checkpoint=$2::text::jsonb where user_id=$1', [subjects.alice, JSON.stringify(checkpoint)]);
+    const [expired] = await q('update "' + privateSchema + '".integration_connections set next_sync_at=greatest(next_sync_at,now()+interval \'1 minute\'),last_error=case when last_error=\'ProviderRateLimited\' and next_sync_at>now() then last_error else null end where user_id=$1 returning last_error,next_sync_at>now() scheduled', [subjects.alice]);
+    expect(expired).toEqual({ last_error: null, scheduled: true });
   });
   it("roundtrips serialised provider metadata and normalised metric pages as JSON objects", async () => {
     await actAs(actors.alice);

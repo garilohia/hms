@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { metricTypes } from "../ingestion/model";
 import { isValidBirthDate } from "../auth/validation";
+import { PatientRequestError } from "./read-errors";
 
 const num = z.union([z.number(),z.string()]).transform(Number).refine(Number.isFinite).nullable();
 export const profileSchema = z.object({ id:z.uuid(),name:z.string(),dob:z.string(),kind:z.enum(["self","dependent"]),timezone:z.string(),
@@ -34,8 +35,10 @@ export const viewInput = z.object({ userId:z.uuid(),section:z.enum(["today","his
   from:z.string().refine(isValidBirthDate).nullable().optional(),to:z.string().refine(isValidBirthDate).nullable().optional(),cursor:z.record(z.string(),z.string().max(80)).nullable().optional() });
 export async function patientPost(path:string,body:unknown,signal?:AbortSignal):Promise<unknown> {
   const response=await fetch(path,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body),cache:"no-store",signal});
-  const result:unknown=await response.json();
-  if(!response.ok) { const error=z.object({error:z.string()}).safeParse(result); throw new Error(error.success?error.data.error:"Please try again."); }
+  let result:unknown;
+  try { result=await response.json(); }
+  catch(error) { if(!response.ok)throw new PatientRequestError("Please try again.",response.status); throw error; }
+  if(!response.ok) { const error=z.object({error:z.string()}).safeParse(result); throw new PatientRequestError(error.success?error.data.error:"Please try again.",response.status); }
   return result;
 }
 export async function readView(userId:string,section:ViewSection,options:{from?:string|null;to?:string|null;cursor?:Record<string,string>|null;signal?:AbortSignal}={}) {

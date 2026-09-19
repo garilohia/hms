@@ -1,12 +1,13 @@
 "use client";
-import { useEffect,useState,useSyncExternalStore } from "react";
+import { useEffect,useRef,useState,useSyncExternalStore } from "react";
 import { patientPost,readView,type PatientView } from "@/src/lib/patient/model";
 import { useRealtimePatientView } from "@/src/lib/patient/realtime";
+import { createReadQueue } from "@/src/lib/patient/read-queue";
+import { reconcileSummaryDrain,todayHistoryRows,todayStatusMessage,type SummaryDrainStatus,type TodayHistory } from "@/src/lib/patient/today-recovery";
 import { AlertIcon } from "../ui/icons";
 import { DataChart } from "../ui/chart";
 import { addDays } from "@/src/lib/analytics/time";
 import { buildSeries, formatValue, type DayValue } from "@/src/lib/patient/chart";
-import type { Summary } from "@/src/lib/patient/model";
 import { RebucketNotice } from "../ui/rebucket";
 const STALE_AFTER_MS=6*60*60*1000;
 function subscribeMinute(callback:()=>void) { const timer=setInterval(callback,60000); return ()=>clearInterval(timer); }
@@ -51,42 +52,72 @@ function MetricCard({icon,label,value,unit,sentence,values,kind,testId,sample}:{
 function sleepLabel(minutes:number) { const h=Math.floor(minutes/60),m=Math.round(minutes%60); return <>{h}<small>h</small> {m}<small>m</small></>; }
 export function Today({initial,today}:{initial:PatientView;today:string}) {
   // The reference Today shows the last 30 days behind each metric. Full-history readers load them; summary-only readers keep the single-value hero.
-  const [rows,setRows]=useState<Summary[]|null>(null);
-  const {view,setView,live}=useRealtimePatientView(initial,"today");
-  const [message,setMessage]=useState(""),[busy,setBusy]=useState(false);
+  const [history,setHistory]=useState<TodayHistory|null>(null);
+  const [historyFailureKey,setHistoryFailureKey]=useState<string|null>(null);
+  const historyQueue=useRef<ReturnType<typeof createReadQueue<TodayHistory>>|null>(null);
+  const historyKeyRef=useRef("");
+  const {view,setView,live,retrying,readError}=useRealtimePatientView(initial,"today");
+  const [drain,setDrain]=useState<SummaryDrainStatus>({message:"",busy:false,recovered:false});
+  const [acknowledgementMessage,setAcknowledgementMessage]=useState(""),[acknowledging,setAcknowledging]=useState(false);
+  const drainController=useRef<AbortController|null>(null);
+  const currentDrain=reconcileSummaryDrain(drain,view.pending_jobs);
+  if(currentDrain!==drain) setDrain(currentDrain);
+  const message=todayStatusMessage(currentDrain,acknowledgementMessage);
+  const busy=acknowledging||currentDrain.busy;
   const userId=initial.profile.id;
   useEffect(()=>{
     if(!initial.pending_jobs || !initial.ingestion_consent || !initial.can_manage) return;
     const controller=new AbortController();
+    drainController.current=controller;
+    const report=(message:string,busy:boolean)=>setDrain(current=>current.recovered?current:{...current,message,busy});
     async function compute() {
-      setBusy(true); setMessage(initial.rebucket?"Recalculating your history for the new timezone…":"Your readings are saved. Updating your summary…");
+      report(initial.rebucket?"Recalculating your history for the new timezone…":"Your readings are saved. Updating your summary…",true);
       try {
         for(let n=0;n<20;n++) {
           await patientPost("/api/patient/refresh",{userId},controller.signal);
-          const next=await readView(userId,"today",{signal:controller.signal}); setView(next);
-          if(!next.pending_jobs) {setMessage("");return;}
+          if(controller.signal.aborted) return;
+          const next=await readView(userId,"today",{signal:controller.signal});
+          if(controller.signal.aborted) return;
+          setView(next);
+          if(!next.pending_jobs) {report("",false);return;}
         }
-        setMessage(initial.rebucket?"Your history is still being recalculated. Open this screen again to continue.":"Some summaries are still queued. Refresh this page later.");
-      } catch { if(!controller.signal.aborted) setMessage("Your readings are saved. Refresh later to retry the summary."); }
-      finally { if(!controller.signal.aborted) setBusy(false); }
+        report(initial.rebucket?"Your history is still being recalculated. Open this screen again to continue.":"Some summaries are still queued. Refresh this page later.",false);
+      } catch { if(!controller.signal.aborted) report("Your readings are saved. Refresh later to retry the summary.",false); }
+      finally { if(!controller.signal.aborted) setDrain(current=>({...current,busy:false})); }
     }
     void compute();
     return ()=>controller.abort();
   },[initial,userId,setView]);
+  useEffect(()=>{if(currentDrain.recovered) drainController.current?.abort();},[currentDrain.recovered]);
   const summary=view.summaries?.[0],alert=view.alerts?.[0];
   const latestComputed=summary?.computed_at;
+  const historyKey=JSON.stringify([userId,today,view.can_read_history,summary?.day,latestComputed]);
   useEffect(()=>{
-    if(!initial.can_read_history) return;
-    const controller=new AbortController();
-    void readView(userId,"history",{from:addDays(today,-29),to:today,signal:controller.signal}).then(next=>setRows(next.summaries??[])).catch(()=>{});
-    return ()=>controller.abort();
-  },[initial.can_read_history,userId,today,latestComputed]);
-  const rhr=usualRange((rows??[]).map(r=>({day:r.day,value:r.rhr})));
-  const sleepValues=(rows??[]).map(r=>({day:r.day,value:r.sleep_duration_min}));
+    if(!view.can_read_history) return;
+    const queue=createReadQueue({
+      online:navigator.onLine,
+      read:async signal=>{
+        const key=historyKeyRef.current;
+        const next=await readView(userId,"history",{from:addDays(today,-29),to:today,signal});
+        return {key,rows:next.summaries??[]};
+      },
+      onSuccess:next=>{if(next.key===historyKeyRef.current) {setHistory(next);setHistoryFailureKey(null);}},
+      onError:()=>setHistoryFailureKey(historyKeyRef.current),
+    });
+    historyQueue.current=queue;
+    const offline=()=>queue.setOnline(false),online=()=>queue.setOnline(true);
+    window.addEventListener("offline",offline);
+    window.addEventListener("online",online);
+    return ()=>{queue.dispose();historyQueue.current=null;window.removeEventListener("offline",offline);window.removeEventListener("online",online);};
+  },[view.can_read_history,userId,today]);
+  useEffect(()=>{historyKeyRef.current=historyKey;historyQueue.current?.refresh();},[historyKey]);
+  const rows=todayHistoryRows(history,historyKey,summary,view.can_read_history);
+  const rhr=usualRange(rows.map(r=>({day:r.day,value:r.rhr})));
+  const sleepValues=rows.map(r=>({day:r.day,value:r.sleep_duration_min}));
   const sleepSeries=usualRange(sleepValues);
-  const latestSleep=[...(rows??[])].sort((a,b)=>b.day.localeCompare(a.day)).find(r=>r.sleep_duration_min!==null)?.sleep_duration_min??summary?.sleep_duration_min??null;
+  const latestSleep=[...rows].sort((a,b)=>b.day.localeCompare(a.day)).find(r=>r.sleep_duration_min!==null)?.sleep_duration_min??summary?.sleep_duration_min??null;
   const latestRhr=rhr.series.last?.value??summary?.rhr??null;
-  const showMetrics=Boolean(rows&&rows.length&&(latestRhr!==null||latestSleep!==null));
+  const showMetrics=Boolean(rows.length&&(latestRhr!==null||latestSleep!==null));
   // DESIGN.md §9. Simple: one hero metric and at most three cards, no raw values. Advanced: the numeric baseline under the hero.
   const mode=view.profile.display_mode;
   const cardBudget=mode==="simple"?3-(showMetrics&&latestRhr!==null?1:0)-(alert||!showMetrics?1:0):3;
@@ -96,15 +127,16 @@ export function Today({initial,today}:{initial:PatientView;today:string}) {
   const alertClass=alert?(alert.severity==="urgent"?"alert-urgent":"alert-attention"):"";
   async function acknowledge() {
     if(!alert) return;
-    setBusy(true);setMessage("");
+    setAcknowledging(true);setAcknowledgementMessage("");
     try {await patientPost("/api/alerts/settings",{userId,action:"acknowledge",payload:{alertId:alert.id}});setView(await readView(userId,"today"));}
-    catch(error){setMessage(error instanceof Error?error.message:"Please try again.");} finally{setBusy(false);}
+    catch(error){setAcknowledgementMessage(error instanceof Error?error.message:"Please try again.");} finally{setAcknowledging(false);}
   }
   return <div className="stack" data-testid="patient-live-state" data-live={live}>
     {view.rebucket&&<RebucketNotice state={view.rebucket}/>}
     <header className="page-header"><h1 className="page-title">Today</h1><p className="page-date">{formatDate(today)}</p><Freshness syncedAt={summary?.computed_at??null} timezone={view.profile.timezone}/></header>
-    {live==="offline"&&<p className="muted" role="status">Live connection interrupted; retrying automatically</p>}
-    {showMetrics&&latestRhr!==null&&<MetricCard testId={alert?undefined:"today-hero"} sample={view.contains_sample} icon={metricIcons.rhr} label="Resting heart rate" value={formatValue(latestRhr)} unit="bpm" sentence={rhr.sentence+(baselineNote?" "+baselineNote:"")} values={(rows??[]).map(r=>({day:r.day,value:r.rhr}))} kind="line"/>}
+    {live==="offline"&&<p className="muted" role="status">{retrying?"Live connection interrupted; retrying automatically":readError||"Live connection interrupted. Reconnect or refresh this page to try again."}</p>}
+    {view.can_read_history&&historyFailureKey===historyKey&&<p className="muted" role="status">Recent history could not be refreshed.{summary?" Showing the latest summary.":""}</p>}
+    {showMetrics&&latestRhr!==null&&<MetricCard testId={alert?undefined:"today-hero"} sample={view.contains_sample} icon={metricIcons.rhr} label="Resting heart rate" value={formatValue(latestRhr)} unit="bpm" sentence={rhr.sentence+(baselineNote?" "+baselineNote:"")} values={rows.map(r=>({day:r.day,value:r.rhr}))} kind="line"/>}
     {showMetrics&&mode!=="simple"&&latestSleep!==null&&<MetricCard icon={metricIcons.sleep} label="Sleep" value={sleepLabel(latestSleep)} sentence={"Last night. "+sleepSeries.sentence} values={sleepValues} kind="bars"/>}
     {(alert||!showMetrics)&&<section className={"card stack "+alertClass} data-testid="today-hero">
       {(view.contains_sample || alert?.is_sample) && <span className="badge">Sample data</span>}

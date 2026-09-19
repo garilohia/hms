@@ -1,5 +1,5 @@
 "use client";
-import { useEffect,useState } from "react";
+import { useEffect,useRef,useState } from "react";
 import { z } from "zod";
 import { addDays } from "@/src/lib/analytics/time";
 import { BAND_MADS,BASELINE_WINDOW_DAYS,buildSeries,chartMetrics,formatValue,summaryValues,type ChartMetric } from "@/src/lib/patient/chart";
@@ -12,7 +12,8 @@ import {useRealtimePatientView} from "@/src/lib/patient/realtime";
 function mergeRows(previous:Summary[],next:Summary[]) { const byDay=new Map(previous.map(r=>[r.day,r])); for(const row of next) byDay.set(row.day,row); return [...byDay.values()]; }
 export function History({initial,today}:{initial:PatientView;today:string}) {
   const [query,setQuery]=useState<NonNullable<Parameters<typeof readView>[2]>>({});
-  const {view,setView,live}=useRealtimePatientView(initial,"history",query);
+  const {view,setView,live,retrying,readError,suspendReads}=useRealtimePatientView(initial,"history",query);
+  const manualRequest=useRef<AbortController|null>(null);
   const [metric,setMetric]=useState<ChartMetric>("RHR"),[range,setRange]=useState("90"),[selected,setSelected]=useState<Summary|null>(null),[error,setError]=useState(""),[busy,setBusy]=useState(false);
   const [baselineRows,setBaselineRows]=useState<Summary[]>(initial.summaries??[]);
   const mode=initial.profile.display_mode;
@@ -22,6 +23,7 @@ export function History({initial,today}:{initial:PatientView;today:string}) {
   const [showAllRows,setShowAllRows]=useState(false);
   const [device,setDevice]=useState<{id:string;label:string}|null>(null),[docs,setDocs]=useState<PatientView|null>(null),[alerts,setAlerts]=useState<PatientView|null>(null),[alertDay,setAlertDay]=useState<string|null>(null);
   const userId=initial.profile.id;
+  useEffect(()=>()=>manualRequest.current?.abort(),[]);
   useEffect(()=>{const controller=new AbortController();
     void readView(userId,"documents",{signal:controller.signal}).then(setDocs).catch(()=>{if(!controller.signal.aborted)setError("Document details could not load. Refresh to retry.");});
     return()=>controller.abort();},[userId]);
@@ -39,9 +41,18 @@ export function History({initial,today}:{initial:PatientView;today:string}) {
     return()=>controller.abort();
   },[activeSource,userId]);
   async function load(nextRange:string,cursor?:Record<string,string>|null) {
+    if(manualRequest.current) return;
+    const controller=new AbortController();manualRequest.current=controller;
     setBusy(true);setError("");
-    try {const nextQuery={from:nextRange==="All"?null:addDays(today,1-Number(nextRange)),to:today,cursor};const next=await readView(userId,"history",nextQuery);setView(next);setQuery(nextQuery);setBaselineRows(previous=>mergeRows(previous,next.summaries??[]));setRange(nextRange);setSelected(null);setAlerts(null);}
-    catch(e){setError(e instanceof Error?e.message:"Please try again.");}finally{setBusy(false);}
+    const resume=await suspendReads();
+    try {
+      if(controller.signal.aborted) return;
+      const nextQuery={from:nextRange==="All"?null:addDays(today,1-Number(nextRange)),to:today,cursor};
+      const next=await readView(userId,"history",{...nextQuery,signal:controller.signal});
+      if(controller.signal.aborted) return;
+      setView(next);setQuery(nextQuery);setBaselineRows(previous=>mergeRows(previous,next.summaries??[]));setRange(nextRange);setSelected(null);setAlerts(null);
+    }catch(e){if(!controller.signal.aborted)setError(e instanceof Error?e.message:"Please try again.");}
+    finally{if(!controller.signal.aborted){resume();setBusy(false);}manualRequest.current=null;}
   }
   async function showAlerts(day:string,cursor?:Record<string,string>|null) {
     setBusy(true);setError("");
@@ -63,6 +74,7 @@ export function History({initial,today}:{initial:PatientView;today:string}) {
   const currentBaselineRows=mergeRows(baselineRows,view.summaries??[]);
   const advancedSeries=mode==="advanced"&&rows.length?buildSeries(summaryValues(rows,metric),{kind:config.kind,baseline:summaryValues(currentBaselineRows,metric)}):null;
   if(mode==="simple") return <div className="stack" data-testid="patient-live-state" data-live={live}>
+    {live==="offline"&&<p className="muted" role="status">{retrying?"Live connection interrupted; retrying automatically":readError||"Live connection interrupted. Reconnect or refresh this page to try again."}</p>}
     {(Object.keys(chartMetrics) as ChartMetric[]).map(key=>{const c=chartMetrics[key],values=summaryValues(rows,key),latest=[...values].reverse().find(v=>v.value!==null);
       return <section key={key} className="card metric-card">{rows.some(r=>r.contains_sample)&&key==="RHR"&&<span className="badge">Sample data</span>}
         <p className="metric-label"><span>{c.label}</span></p>
@@ -75,6 +87,7 @@ export function History({initial,today}:{initial:PatientView;today:string}) {
     {error&&<p role="alert">{error}</p>}
   </div>;
   return <div className="stack" data-testid="patient-live-state" data-live={live}>
+    {live==="offline"&&<p className="muted" role="status">{retrying?"Live connection interrupted; retrying automatically":readError||"Live connection interrupted. Reconnect or refresh this page to try again."}</p>}
     {view.rebucket&&<RebucketNotice state={view.rebucket}/>}
     <div aria-label="Metric" className="chips">{Object.keys(chartMetrics).map(key=><button key={key} aria-pressed={metric===key} onClick={()=>{setMetric(key as ChartMetric);setOverlays(o=>o.filter(v=>v!==key));setSelected(null);}}>{key}</button>)}</div>
     {mode==="advanced"&&<div aria-label="Overlay metrics" className="chips">{(Object.keys(chartMetrics) as ChartMetric[]).filter(key=>key!==metric).map(key=><button key={key} aria-pressed={overlays.includes(key)} disabled={!overlays.includes(key)&&overlays.length>=3} onClick={()=>setOverlays(o=>o.includes(key)?o.filter(v=>v!==key):[...o,key])}>{overlays.includes(key)?"Overlay "+(overlays.indexOf(key)+1)+": "+key:"+ "+key}</button>)}</div>}

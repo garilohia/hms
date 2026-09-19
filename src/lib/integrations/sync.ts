@@ -3,10 +3,11 @@ import { z } from "zod";
 import { addDays, localDay } from "../analytics/time";
 import { normalisedMetric, type NormalisedMetric } from "../ingestion/model";
 import type { IntegrationProvider, StoredTokens } from "./model";
-import { loadIntegration, markIntegrationSynced, persistIntegrationMetrics, refreshIntegrationTokens } from "./store";
+import { assertIntegrationReady, CommittedIntegrationCooldownError, loadIntegration, markIntegrationSynced, persistIntegrationMetrics, refreshIntegrationTokens, saveIntegrationCooldown } from "./store";
 import { normaliseGoogle } from "./normalise";
-import { syncCheckpoint, type SyncCheckpoint, type SyncCollection } from "./checkpoint";
+import { advanceSyncVisit, fairSyncCheckpoint, nextSyncVisit, reconciliationComplete, syncCheckpoint, type FairSyncCheckpoint, type SyncCollection } from "./checkpoint";
 import { saveIntegrationCheckpoint } from "./checkpoint-store";
+import { ProviderRateLimitError, providerResponseError } from "./rate-limit";
 
 function metric(input: Omit<NormalisedMetric,"duration_s"|"quality"|"external_id"> & Partial<Pick<NormalisedMetric,"duration_s"|"quality"|"external_id">>) {
   return normalisedMetric.safeParse({ duration_s:null, quality:"raw", external_id:null, ...input });
@@ -32,6 +33,8 @@ async function googlePage(accessToken:string,type:string,window:SyncWindow,pageT
     url.searchParams.set("filter",`${field} >= \"${daily?window.firstDay:window.start}\" AND ${field} < \"${daily?window.nextDay:window.end}\"`);
     if(pageToken)url.searchParams.set("pageToken",pageToken);
     const response=await fetch(url,{headers:{Authorization:`Bearer ${accessToken}`},cache:"no-store",signal:AbortSignal.timeout(Math.max(1,Math.min(20_000,deadline-Date.now())))});
+    const throttle = providerResponseError(response, "google_health");
+    if (throttle) throw throttle;
     const body=z.object({dataPoints:z.array(z.unknown()).default([]),nextPageToken:z.string().optional()}).safeParse(await response.json().catch(()=>null));
     if(!response.ok||!body.success)throw new Error(`Google Health ${type} sync failed.`);
     return { records: body.data.dataPoints, nextToken: body.data.nextPageToken || "" };
@@ -53,6 +56,8 @@ function collectionsFor(provider: IntegrationProvider, scopes:string[]):SyncColl
 async function whoopPage(tokens:StoredTokens,path:string,window:SyncWindow,nextToken:string,deadline:number){
     const url=new URL(`https://api.prod.whoop.com/developer/v2/${path}`);url.searchParams.set("limit","25");url.searchParams.set("start",window.start);url.searchParams.set("end",window.end);if(nextToken)url.searchParams.set("nextToken",nextToken);
     const response=await fetch(url,{headers:{Authorization:`Bearer ${tokens.accessToken}`},cache:"no-store",signal:AbortSignal.timeout(Math.max(1,Math.min(20_000,deadline-Date.now())))});
+    const throttle = providerResponseError(response, "whoop");
+    if (throttle) throw throttle;
     const body=z.object({records:z.array(z.unknown()).default([]),next_token:z.string().optional()}).safeParse(await response.json().catch(()=>null));if(!response.ok||!body.success)throw new Error(`WHOOP ${path} sync failed.`);
     return { records: body.data.records, nextToken: body.data.next_token || "" };
 }
@@ -65,31 +70,48 @@ function normaliseWhoop(records:unknown[],collection:SyncCollection):NormalisedM
   return output;
 }
 
-export async function syncIntegration(actor:string,subject:string,provider:IntegrationProvider,options:{deadline?:number}={}){
+export async function syncIntegration(actor:string,subject:string,provider:IntegrationProvider,options:{deadline?:number;startDeadline?:number;maxPages?:number;onPageComplete?:()=>void}={}){
   const deadline=options.deadline??Date.now()+30_000;
+  const startDeadline=Math.min(options.startDeadline??deadline,deadline);
   const result:{inserted:number;skipped:number;complete:boolean;syncedThrough:string|null}={inserted:0,skipped:0,complete:false,syncedThrough:null};
   const connection=await loadIntegration(actor,subject,provider);
   if(Date.now()>=deadline)return result;
+  if(connection.retryAt && connection.retryAt.getTime()>Date.now())throw new ProviderRateLimitError(connection.retryAt);
   let tokens=connection.tokens,connectionVersion=connection.connectionVersion;
+  try {
   if(!validTokens(tokens))({tokens,connectionVersion}=await refreshIntegrationTokens(actor,subject,provider,connectionVersion,deadline));
   if(Date.now()>=deadline)return result;
   const collections=collectionsFor(provider,connection.scopes);
-  let checkpoint:SyncCheckpoint;
+  let checkpoint:FairSyncCheckpoint;
   if(connection.syncCheckpoint){
-    checkpoint=syncCheckpoint.parse(connection.syncCheckpoint);
+    const stored=syncCheckpoint.parse(connection.syncCheckpoint);
+    checkpoint=fairSyncCheckpoint(stored);
     if(checkpoint.provider!==provider||checkpoint.collections.some(type=>!collections.includes(type)))throw new Error("The wearable scopes changed. Reconnect the account.");
+    if(stored.version===1)await saveIntegrationCheckpoint(actor,subject,provider,connectionVersion,stored,checkpoint);
   }else{
-    checkpoint={version:1,provider,window:syncWindow(connection.timezone),collections,collectionIndex:0,nextToken:""};
+    checkpoint=fairSyncCheckpoint({version:1,provider,window:syncWindow(connection.timezone),collections,collectionIndex:0,nextToken:""});
     await saveIntegrationCheckpoint(actor,subject,provider,connectionVersion,null,checkpoint);
   }
   // Leave time for the bounded page write. A database transaction already in
   // flight may finish later; never start another phase after the work deadline.
-  for(let page=0;page<maximumPages&&checkpoint.collectionIndex<checkpoint.collections.length&&Date.now()+pagePersistenceReserveMs<deadline;page++){
-    const type=checkpoint.collections[checkpoint.collectionIndex];
+  const pageLimit=Math.max(0,Math.min(maximumPages,Math.floor(options.maxPages??maximumPages)));
+  for(let page=0;page<pageLimit&&Date.now()<startDeadline&&Date.now()+pagePersistenceReserveMs<deadline;page++){
+    const visit=nextSyncVisit(checkpoint,Date.now());
+    if(!visit)break;
+    await assertIntegrationReady(actor,subject,provider,connectionVersion);
+    if(Date.now()>=startDeadline||Date.now()+pagePersistenceReserveMs>=deadline)break;
+    const type=checkpoint.collections[visit.index];
+    // Google documents descending interval start time for list results:
+    // https://developers.google.com/health/reference/rest/v4/users.dataTypes.dataPoints/list
+    // A current head page can expose new readings during a long frozen sweep.
+    // Its continuation is deliberately NOT a completion cursor: reconciliation
+    // still drains every page and is the only lane allowed to move last_sync_at.
+    const window=visit.lane==="head"?syncWindow(connection.timezone):checkpoint.window;
+    const nextToken=visit.lane==="head"?"":checkpoint.cursors[visit.index].nextToken;
     const fetchDeadline=deadline-pagePersistenceReserveMs;
-    const batch=provider==="google_health"?await googlePage(tokens.accessToken,type,checkpoint.window,checkpoint.nextToken,fetchDeadline):await whoopPage(tokens,type,checkpoint.window,checkpoint.nextToken,fetchDeadline);
+    const batch=provider==="google_health"?await googlePage(tokens.accessToken,type,window,nextToken,fetchDeadline):await whoopPage(tokens,type,window,nextToken,fetchDeadline);
     if(Date.now()>=deadline)return result;
-    const metrics=provider==="google_health"?batch.records.flatMap(point=>normaliseGoogle(point,type,connection.timezone)).filter(item=>localDay(item.recorded_at,connection.timezone)>=checkpoint.window.firstDay):normaliseWhoop(batch.records,type);
+    const metrics=provider==="google_health"?batch.records.flatMap(point=>normaliseGoogle(point,type,connection.timezone)).filter(item=>localDay(item.recorded_at,connection.timezone)>=window.firstDay):normaliseWhoop(batch.records,type);
     if(metrics.length){
       const persisted=await persistIntegrationMetrics(actor,subject,connection.sourceId,metrics,connectionVersion);
       result.inserted+=persisted.inserted;result.skipped+=persisted.skipped;
@@ -97,14 +119,23 @@ export async function syncIntegration(actor:string,subject:string,provider:Integ
     // If the data write took the remaining budget, replay this page next time.
     // Its checkpoint remains unchanged and hms_ingest_batch deduplicates it.
     if(Date.now()>=deadline)return result;
-    const next={...checkpoint,collectionIndex:checkpoint.collectionIndex+(batch.nextToken?0:1),nextToken:batch.nextToken};
+    const next=advanceSyncVisit(checkpoint,visit,batch.nextToken);
     await saveIntegrationCheckpoint(actor,subject,provider,connectionVersion,checkpoint,next);
     checkpoint=next;
+    options.onPageComplete?.();
   }
-  if(checkpoint.collectionIndex===checkpoint.collections.length&&Date.now()<deadline){
+  if(reconciliationComplete(checkpoint)&&Date.now()<deadline){
     await markIntegrationSynced(actor,subject,provider,connectionVersion,checkpoint);
     result.complete=true;
     result.syncedThrough=checkpoint.window.end;
   }
   return result;
+  } catch (error) {
+    // Exhausting a deliberately short scheduled fetch slice is a yield, not a
+    // vendor failure. Keep the exact page for the next tick rather than adding
+    // the generic five-minute error delay. Other network errors still fail.
+    if(error instanceof Error && error.name==="TimeoutError" && Date.now()+pagePersistenceReserveMs>=deadline)return result;
+    if(error instanceof ProviderRateLimitError && !(error instanceof CommittedIntegrationCooldownError))await saveIntegrationCooldown(actor,subject,provider,connectionVersion,error.retryAt);
+    throw error;
+  }
 }

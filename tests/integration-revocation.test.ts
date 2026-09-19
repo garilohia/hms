@@ -4,6 +4,7 @@ vi.mock("server-only", () => ({}));
 
 import { revokeProviderAccess } from "@/src/lib/integrations/revocation";
 import { exchangeCode, providerConfig, refreshAccessToken } from "@/src/lib/integrations/providers";
+import { ProviderRateLimitError } from "@/src/lib/integrations/rate-limit";
 
 const tokens = { accessToken: "test-access", refreshToken: "test-refresh", tokenType: "Bearer" };
 
@@ -12,7 +13,7 @@ describe("provider access revocation", () => {
     vi.stubEnv("WHOOP_CLIENT_ID", "test-client");
     vi.stubEnv("WHOOP_CLIENT_SECRET", "test-secret");
   });
-  afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
+  afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); vi.useRealTimers(); });
 
   it("posts Google's refresh token in the body and confirms only HTTP 200", async () => {
     const request = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
@@ -98,5 +99,30 @@ describe("provider access revocation", () => {
     vi.stubGlobal("fetch", request);
     await expect(refreshAccessToken("whoop", tokens, Date.now() - 1)).rejects.toThrow("queued for the next sync");
     expect(request).not.toHaveBeenCalled();
+  });
+
+  it.each(["google_health", "whoop"] as const)("preserves %s refresh Retry-After without parsing the response body", async provider => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-19T12:00:00Z"));
+    vi.stubEnv("GOOGLE_HEALTH_CLIENT_ID", "test-client");
+    vi.stubEnv("GOOGLE_HEALTH_CLIENT_SECRET", "test-secret");
+    const response = new Response("Provider error body must not be read", { status: 429, headers: { "Retry-After": "900" } });
+    const parseBody = vi.spyOn(response, "json");
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response));
+    await expect(refreshAccessToken(provider, tokens)).rejects.toMatchObject({ name: "ProviderRateLimitError", retryAt: new Date("2026-09-19T12:15:00Z") });
+    expect(parseBody).not.toHaveBeenCalled();
+    expect(response.bodyUsed).toBe(false);
+    expect(fetch).toHaveBeenCalledOnce();
+  });
+
+  it("uses WHOOP reset headers when refresh throttling omits Retry-After", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-19T12:00:00Z"));
+    const response = new Response(null, { status: 429, headers: { "X-RateLimit-Reset": "60" } });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response));
+    const result = refreshAccessToken("whoop", tokens);
+    await expect(result).rejects.toBeInstanceOf(ProviderRateLimitError);
+    await expect(result).rejects.toMatchObject({ retryAt: new Date("2026-09-19T12:01:00Z") });
+    expect(response.bodyUsed).toBe(false);
   });
 });

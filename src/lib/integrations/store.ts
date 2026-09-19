@@ -2,10 +2,11 @@ import "server-only";
 import { rightsDatabase, bindActor, lockOwnedSubject, type Executor } from "../data-rights/server";
 import { providerConfig, refreshAccessToken } from "./providers";
 import { revokeProviderAccess } from "./revocation";
-import { syncCheckpoint } from "./checkpoint";
+import { reconciliationComplete, syncCheckpoint } from "./checkpoint";
 import { seal, unseal } from "./crypto";
 import type { NormalisedMetric } from "../ingestion/model";
 import type { IntegrationProvider, IntegrationStatus, StoredTokens } from "./model";
+import { ProviderRateLimitError } from "./rate-limit";
 
 const databaseProvider: Record<IntegrationProvider, "google_health_api" | "whoop_api"> = { google_health: "google_health_api", whoop: "whoop_api" };
 
@@ -95,43 +96,96 @@ export async function loadIntegration(actor: string, subject: string, provider: 
     return await db.begin(async tx => {
       await bindActor(tx, actor);
       await lockOwnedSubject(tx, subject, true);
-      const [row] = await tx.unsafe("select c.source_id,c.encrypted_tokens,c.granted_scopes,c.sync_checkpoint,p.timezone,s.last_sync_at::text from hms_private.integration_connections c join public.profiles p on p.id=c.user_id join public.data_sources s on s.id=c.source_id where c.user_id=$1 and c.provider=$2 and s.status='connected' for update of c", [subject, provider]);
+      const [row] = await tx.unsafe("select c.source_id,c.encrypted_tokens,c.granted_scopes,c.sync_checkpoint,c.last_error,c.next_sync_at::text,p.timezone,s.last_sync_at::text from hms_private.integration_connections c join public.profiles p on p.id=c.user_id join public.data_sources s on s.id=c.source_id where c.user_id=$1 and c.provider=$2 and s.status='connected' for update of c", [subject, provider]);
       if (!row) throw new Error("Connect this wearable first.");
-      return { sourceId: String(row.source_id), connectionVersion: String(row.encrypted_tokens), syncCheckpoint: row.sync_checkpoint as unknown, timezone: String(row.timezone), lastSyncAt: row.last_sync_at ? String(row.last_sync_at) : null, scopes: Array.isArray(row.granted_scopes) ? row.granted_scopes.map(String) : [], tokens: unseal<StoredTokens>(String(row.encrypted_tokens)) };
+      return { sourceId: String(row.source_id), connectionVersion: String(row.encrypted_tokens), syncCheckpoint: row.sync_checkpoint as unknown, retryAt: activeCooldown(row), timezone: String(row.timezone), lastSyncAt: row.last_sync_at ? String(row.last_sync_at) : null, scopes: Array.isArray(row.granted_scopes) ? row.granted_scopes.map(String) : [], tokens: unseal<StoredTokens>(String(row.encrypted_tokens)) };
     });
   } finally { await db.end(); }
 }
 
 async function assertCurrentConnection(tx: Executor, subject: string, connectionVersion: string, selector: { provider: IntegrationProvider } | { sourceId: string }) {
-  const [row] = await tx.unsafe(`select 1 from hms_private.integration_connections c join public.data_sources s on s.id=c.source_id where c.user_id=$1 and c.encrypted_tokens=$2 and s.status='connected' and ${"provider" in selector ? "c.provider" : "c.source_id"}=$3 for update of c`, [subject, connectionVersion, "provider" in selector ? selector.provider : selector.sourceId]);
+  const [row] = await tx.unsafe(`select c.last_error,c.next_sync_at::text from hms_private.integration_connections c join public.data_sources s on s.id=c.source_id where c.user_id=$1 and c.encrypted_tokens=$2 and s.status='connected' and ${"provider" in selector ? "c.provider" : "c.source_id"}=$3 for update of c`, [subject, connectionVersion, "provider" in selector ? selector.provider : selector.sourceId]);
   if (!row) throw new Error("The wearable connection changed. Refresh this page before syncing again.");
+  return row;
 }
 
-export async function refreshIntegrationTokens(actor: string, subject: string, provider: IntegrationProvider, connectionVersion: string, deadline?: number) {
+function activeCooldown(row: Record<string, unknown>): Date | null {
+  if (row.last_error !== "ProviderRateLimited") return null;
+  const retryAt = new Date(String(row.next_sync_at));
+  return Number.isFinite(retryAt.getTime()) && retryAt.getTime() > Date.now() ? retryAt : null;
+}
+
+function assertNoCooldown(row: Record<string, unknown>) {
+  const retryAt = activeCooldown(row);
+  if (retryAt) throw new ProviderRateLimitError(retryAt);
+}
+
+/** Recheck a cooldown established by another request before every provider page. */
+export async function assertIntegrationReady(actor: string, subject: string, provider: IntegrationProvider, connectionVersion: string) {
   const db = rightsDatabase();
   try {
-    return await db.begin(async tx => {
+    await db.begin(async tx => {
       await bindActor(tx, actor);
       await lockOwnedSubject(tx, subject, true);
-      await assertCurrentConnection(tx, subject, connectionVersion, { provider });
-      const tokens = await refreshAccessToken(provider, unseal<StoredTokens>(connectionVersion), deadline);
-      const updatedVersion = seal(tokens);
-      await tx.unsafe("update hms_private.integration_connections set encrypted_tokens=$1,token_expires_at=$2,updated_at=now() where user_id=$3 and provider=$4", [updatedVersion, tokens.expiresAt || null, subject, provider]);
-      return { tokens, connectionVersion: updatedVersion };
+      assertNoCooldown(await assertCurrentConnection(tx, subject, connectionVersion, { provider }));
     });
   } finally { await db.end(); }
 }
 
-export async function markIntegrationSynced(actor: string, subject: string, provider: IntegrationProvider, connectionVersion: string, expectedCheckpoint: unknown) {
-  const checkpoint = syncCheckpoint.parse(expectedCheckpoint);
-  if (checkpoint.provider !== provider || checkpoint.collectionIndex !== checkpoint.collections.length || checkpoint.nextToken) throw new Error("Finish all wearable pages before marking the sync complete.");
+// This protects this connection only, not the provider's aggregate client quota.
+// Keep the current page and lease; the scheduler releases only its own lease.
+export async function saveIntegrationCooldown(actor: string, subject: string, provider: IntegrationProvider, connectionVersion: string, retryAt: Date) {
+  if (!Number.isFinite(retryAt.getTime())) throw new Error("Invalid wearable retry time.");
   const db = rightsDatabase();
   try {
     await db.begin(async tx => {
       await bindActor(tx, actor);
       await lockOwnedSubject(tx, subject, true);
       await assertCurrentConnection(tx, subject, connectionVersion, { provider });
-      const rows = await tx.unsafe("update hms_private.integration_connections c set next_sync_at=now()+interval '1 minute',sync_locked_until=null,sync_checkpoint=null,last_error=null,updated_at=now() where c.user_id=$1 and c.provider=$2 and c.sync_checkpoint is not distinct from $3::text::jsonb returning source_id", [subject, provider, JSON.stringify(checkpoint)]);
+      await tx.unsafe("update hms_private.integration_connections set next_sync_at=greatest(next_sync_at,$1),last_error='ProviderRateLimited',updated_at=now() where user_id=$2 and provider=$3", [retryAt, subject, provider]);
+    });
+  } finally { await db.end(); }
+}
+
+/** The refresh transaction committed this cooldown before releasing its grant lock. */
+export class CommittedIntegrationCooldownError extends ProviderRateLimitError {}
+
+export async function refreshIntegrationTokens(actor: string, subject: string, provider: IntegrationProvider, connectionVersion: string, deadline?: number) {
+  const db = rightsDatabase();
+  try {
+    const outcome = await db.begin(async tx => {
+      await bindActor(tx, actor);
+      await lockOwnedSubject(tx, subject, true);
+      assertNoCooldown(await assertCurrentConnection(tx, subject, connectionVersion, { provider }));
+      try {
+        const tokens = await refreshAccessToken(provider, unseal<StoredTokens>(connectionVersion), deadline);
+        const updatedVersion = seal(tokens);
+        await tx.unsafe("update hms_private.integration_connections set encrypted_tokens=$1,token_expires_at=$2,updated_at=now() where user_id=$3 and provider=$4", [updatedVersion, tokens.expiresAt || null, subject, provider]);
+        return { status: "refreshed" as const, tokens, connectionVersion: updatedVersion };
+      } catch (error) {
+        if (!(error instanceof ProviderRateLimitError)) throw error;
+        // Returning, rather than throwing here, commits Retry-After while the
+        // old grant is still locked. A waiting refresh must observe the delay
+        // before it can rotate the token and invalidate an old-version write.
+        await tx.unsafe("update hms_private.integration_connections set next_sync_at=greatest(next_sync_at,$1),last_error='ProviderRateLimited',updated_at=now() where user_id=$2 and provider=$3", [error.retryAt, subject, provider]);
+        return { status: "limited" as const, retryAt: error.retryAt };
+      }
+    });
+    if (outcome.status === "limited") throw new CommittedIntegrationCooldownError(outcome.retryAt);
+    return { tokens: outcome.tokens, connectionVersion: outcome.connectionVersion };
+  } finally { await db.end(); }
+}
+
+export async function markIntegrationSynced(actor: string, subject: string, provider: IntegrationProvider, connectionVersion: string, expectedCheckpoint: unknown) {
+  const checkpoint = syncCheckpoint.parse(expectedCheckpoint);
+  if (checkpoint.provider !== provider || !reconciliationComplete(checkpoint)) throw new Error("Finish all wearable pages before marking the sync complete.");
+  const db = rightsDatabase();
+  try {
+    await db.begin(async tx => {
+      await bindActor(tx, actor);
+      await lockOwnedSubject(tx, subject, true);
+      await assertCurrentConnection(tx, subject, connectionVersion, { provider });
+      const rows = await tx.unsafe("update hms_private.integration_connections c set next_sync_at=greatest(next_sync_at,now()+interval '1 minute'),sync_locked_until=null,sync_checkpoint=null,last_error=case when last_error='ProviderRateLimited' and next_sync_at>now() then last_error else null end,updated_at=now() where c.user_id=$1 and c.provider=$2 and c.sync_checkpoint is not distinct from $3::text::jsonb returning source_id", [subject, provider, JSON.stringify(checkpoint)]);
       if (!rows[0]) throw new Error("The wearable sync changed. Retry to continue.");
       // A long sweep only covers its frozen window, not the time it completes.
       await tx.unsafe("update public.data_sources set last_sync_at=$1 where id=$2 and user_id=$3", [checkpoint.window.end, rows[0].source_id, subject]);

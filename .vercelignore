@@ -1,0 +1,16 @@
+# Never upload local credentials or browser/database acceptance artefacts.
+.env*
+!.env.example
+.git
+.next
+node_modules
+.vercel
+test-results
+playwright-report
+coverage
+.vitest
+design-audit/*.png
+*.tsbuildinfo
+*.pem
+.DS_Store
+*-debug.log*

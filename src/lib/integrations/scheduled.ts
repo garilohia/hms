@@ -23,13 +23,21 @@ export async function syncDueIntegrations(db: postgres.Sql, options: { limit?: n
     const now = options.clock?.() ?? new Date(), due = await claim(db, now);
     if (!due) break;
     try {
-      const sync = await syncIntegration(due.actor, due.userId, due.provider, { deadline });
+      // Stop starting pages after a small slice, but let an already-started
+      // request use the remaining shared budget. A hard three-second fetch
+      // timeout could otherwise replay a healthy four-second page forever.
+      const startDeadline = Math.min(deadline, Date.now() + 8_000);
+      let progressed = false;
+      const sync = await syncIntegration(due.actor, due.userId, due.provider, { deadline, startDeadline, maxPages: 3, onPageComplete: () => { progressed = true; } });
       if (sync.complete) result.synced++; else result.queued++;
       result.inserted += sync.inserted;
-      await db.unsafe("update hms_private.integration_connections c set sync_locked_until=null,next_sync_at=$1,last_error=null,updated_at=$2 from public.data_sources s where s.id=c.source_id and s.status='connected' and c.user_id=$3 and c.provider=$4 and c.sync_locked_until=$5", [new Date(now.getTime() + 60_000), now, due.userId, due.provider, due.lease]);
+      // Tail connections that could not advance a page remain due ahead of
+      // serviced work next tick. Do not count fetch/ingestion without cursor CAS.
+      const nextAttempt = new Date(now.getTime() + (progressed || sync.complete ? 60_000 : 0));
+      await db.unsafe("update hms_private.integration_connections c set sync_locked_until=null,next_sync_at=greatest(c.next_sync_at,$1),last_error=case when c.last_error='ProviderRateLimited' and c.next_sync_at>$2 then c.last_error else null end,updated_at=$2 from public.data_sources s where s.id=c.source_id and s.status='connected' and c.user_id=$3 and c.provider=$4 and c.sync_locked_until=$5", [nextAttempt, now, due.userId, due.provider, due.lease]);
     } catch {
       result.failed++;
-      await db.unsafe("update hms_private.integration_connections c set sync_locked_until=null,next_sync_at=$1,last_error='ProviderSyncFailed',updated_at=$2 from public.data_sources s where s.id=c.source_id and s.status='connected' and c.user_id=$3 and c.provider=$4 and c.sync_locked_until=$5", [new Date(now.getTime() + 5 * 60_000), now, due.userId, due.provider, due.lease]);
+      await db.unsafe("update hms_private.integration_connections c set sync_locked_until=null,next_sync_at=case when c.last_error='ProviderRateLimited' and c.next_sync_at>$2 then c.next_sync_at else greatest(c.next_sync_at,$1) end,last_error=case when c.last_error='ProviderRateLimited' and c.next_sync_at>$2 then c.last_error else 'ProviderSyncFailed' end,updated_at=$2 from public.data_sources s where s.id=c.source_id and s.status='connected' and c.user_id=$3 and c.provider=$4 and c.sync_locked_until=$5", [new Date(now.getTime() + 5 * 60_000), now, due.userId, due.provider, due.lease]);
     }
   }
   return result;
