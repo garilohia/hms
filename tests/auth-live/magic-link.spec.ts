@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import postgres from "postgres";
 import { expect, test } from "@playwright/test";
+import { runCleanup, type CleanupTask } from "../helpers/cleanup";
 
 test("real Supabase magic-link session, guardian consent, and sign-out", async ({ page, baseURL }) => {
   const url=process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -41,12 +42,13 @@ test("real Supabase magic-link session, guardian consent, and sign-out", async (
     await page.goto("/account");
     await expect(page).toHaveURL(baseURL + "/sign-in");
   } finally {
-    if (actor) {
-      const {error}=await admin.auth.admin.deleteUser(actor);
-      if(error) throw new Error("Test account cleanup failed: " + error.code);
-      await db.unsafe("delete from public.audit_log where actor_id=$1 or target_user_id=any($2::uuid[])",[actor,subjectIds]);
-    }
-    await db.end();
+    const tasks:CleanupTask[]=[];
+    if(actor){const actorId=actor;tasks.push(
+      {label:"delete auth test account",run:async()=>{const {error}=await admin.auth.admin.deleteUser(actorId);if(error)throw new Error(error.code);}},
+      {label:"delete auth test audit rows",run:()=>db.unsafe("delete from public.audit_log where actor_id=$1 or target_user_id=any($2::uuid[])",[actorId,subjectIds])},
+    );}
+    tasks.push({label:"close auth test database",run:()=>db.end()});
+    await runCleanup(tasks,"Auth verification cleanup failed.");
   }
 });
 
@@ -84,7 +86,12 @@ test("mobile bearer session registers a source and retries one immutable batch",
     const changed=await page.request.post("/api/mobile/ingest",{headers,data:{protocolVersion:1,userId:subject,sourceId,batchId,metrics:[{...metrics[0],value:73}]}});
     expect(changed.status()).toBe(400);
   }finally{
-    if(actor){const cleanup=await admin.auth.admin.deleteUser(actor);if(cleanup.error)throw new Error("Mobile test cleanup failed: "+cleanup.error.code);await db.unsafe("delete from public.audit_log where actor_id=$1 or target_user_id=$2",[actor,subject||null]);}
-    await db.end();
+    const tasks:CleanupTask[]=[];
+    if(actor){const actorId=actor;tasks.push(
+      {label:"delete mobile test account",run:async()=>{const cleanup=await admin.auth.admin.deleteUser(actorId);if(cleanup.error)throw new Error(cleanup.error.code);}},
+      {label:"delete mobile test audit rows",run:()=>db.unsafe("delete from public.audit_log where actor_id=$1 or target_user_id=$2",[actorId,subject||null])},
+    );}
+    tasks.push({label:"close mobile test database",run:()=>db.end()});
+    await runCleanup(tasks,"Mobile verification cleanup failed.");
   }
 });

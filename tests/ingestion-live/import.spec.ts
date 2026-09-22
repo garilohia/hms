@@ -9,6 +9,7 @@ import postgres from "postgres";
 import { generateAppleFixture } from "../fixtures/apple-zip";
 import { CSV_TEMPLATE } from "../../src/lib/ingestion/csv";
 import { MAX_BODY_BYTES } from "../../src/lib/ingestion/model";
+import { runCleanup, type CleanupTask } from "../helpers/cleanup";
 
 const exec = promisify(execFile);
 test("CSV round-trip and 210 MiB Apple ZIP in a browser worker, bounded memory and idempotent re-import", async ({ page, browser, baseURL }, info) => {
@@ -127,14 +128,16 @@ test("CSV round-trip and 210 MiB Apple ZIP in a browser worker, bounded memory a
     await writeFile(diagnostics, JSON.stringify({ requestErrors, browserErrors, memoryErrors, maxBatchBytes, batches, peakRendererRssBytes, memorySamples, ui }, null, 2)).catch(error => {
       process.stderr.write("Could not save import diagnostics: " + String(error) + "\n");
     });
-    await cdp.detach();
-    await page.close();
-    if (actor) {
-      const { error } = await admin.auth.admin.deleteUser(actor);
-      if (error) throw new Error("Import fixture cleanup failed: " + error.code);
-      await db.unsafe("delete from public.audit_log where actor_id=$1 or target_user_id=$2", [actor, subject || null]);
-    }
-    await db.end();
+    const tasks:CleanupTask[]=[
+      {label:"detach import diagnostics session",run:()=>cdp.detach()},
+      {label:"close import browser page",run:()=>page.close()},
+    ];
+    if(actor){const actorId=actor;tasks.push(
+      {label:"delete Apple import account",run:async()=>{const {error}=await admin.auth.admin.deleteUser(actorId);if(error)throw new Error(error.code);}},
+      {label:"delete Apple import audit rows",run:()=>db.unsafe("delete from public.audit_log where actor_id=$1 or target_user_id=$2",[actorId,subject||null])},
+    );}
+    tasks.push({label:"close Apple import database",run:()=>db.end()});
+    await runCleanup(tasks,"Apple import verification cleanup failed.");
   }
 });
 
@@ -179,12 +182,12 @@ test("Google Fit and Google Health folders import supported files, skip unrelate
     await expect(progress).toHaveAttribute("data-inserted", "0");
     await expect(progress).toHaveAttribute("data-skipped", "10");
   } finally {
-    await page.close();
-    if (actor) {
-      const { error } = await admin.auth.admin.deleteUser(actor);
-      if (error) throw new Error("Import fixture cleanup failed: " + error.code);
-      await db.unsafe("delete from public.audit_log where actor_id=$1 or target_user_id=$2", [actor, subject || null]);
-    }
-    await db.end();
+    const tasks:CleanupTask[]=[{label:"close Google folder import page",run:()=>page.close()}];
+    if(actor){const actorId=actor;tasks.push(
+      {label:"delete Google folder import account",run:async()=>{const {error}=await admin.auth.admin.deleteUser(actorId);if(error)throw new Error(error.code);}},
+      {label:"delete Google folder import audit rows",run:()=>db.unsafe("delete from public.audit_log where actor_id=$1 or target_user_id=$2",[actorId,subject||null])},
+    );}
+    tasks.push({label:"close Google folder import database",run:()=>db.end()});
+    await runCleanup(tasks,"Google folder import verification cleanup failed.");
   }
 });

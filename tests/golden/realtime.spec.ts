@@ -1,6 +1,7 @@
 import {randomUUID} from "node:crypto";
 import {expect,test,type BrowserContext,type Route} from "@playwright/test";
 import {liveFixtures} from "./live-fixtures";
+import {runCleanup} from "../helpers/cleanup";
 
 test("Today, History and consultation chat update without refresh",async({page,browser,baseURL},testInfo)=>{
   if(!baseURL)throw new Error("Base URL required.");
@@ -77,7 +78,9 @@ test("Today, History and consultation chat update without refresh",async({page,b
     await expect(doctorPage.locator(".message-row").getByText("Message while doctor is offline",{exact:true})).toBeVisible({timeout:45000});
     expect(f.errors).toEqual([]);
   }finally{
-    await doctorContext?.close();
-    await f.cleanup();
+    await runCleanup([
+      {label:"close Realtime doctor context",run:()=>doctorContext?.close()},
+      {label:"remove Realtime fixtures",run:()=>f.cleanup()},
+    ],"Realtime golden-path cleanup failed.");
   }
 });

@@ -354,3 +354,9 @@ The browser's native selected-radio blue was also outside DESIGN.md §4.2. Radio
 ## D046 — Keep the full chart language in compact and overlay states
 
 DESIGN.md §5 applies to every chart and §9 says its language is identical across densities. Compact Summary/Simple charts therefore retain the single top unit label and both endpoint dates instead of treating “sparkline” as permission to omit them. Advanced overlays use the same per-metric baseline split as the primary line, retain dash/weight distinctions, expose one end value per series and include every series in the chart's text alternative. Alert notches retain their 2px visible mark but receive a transparent 44px interaction target. No metric, range, analytics formula or alert state changed.
+
+## D047 — Synthetic teardown is best-effort across every owned resource
+
+Live verification must attempt every cleanup operation even when an earlier operation fails. A failed browser-context close, Auth deletion, audit-row deletion, diagnostics detach or database close must not prevent later owned resources from being released. The shared test helper runs tasks serially, labels each failure and returns all failures as an aggregate when necessary. Serial order is retained where an account deletion must wait behind an in-flight request or profile lock.
+
+This policy now covers standalone Auth and alert checks, both importer checks, patient/doctor/guardian/Realtime golden paths and the shared family fixture. Data-rights and design-audit tests retain their existing independent cleanup loops. Unit tests inject one and multiple failures to prove subsequent tasks run and all failures remain visible. This hardens synthetic cleanup only; it does not isolate global dispatch from a shared Production queue or authorise live acceptance against real patient activity.

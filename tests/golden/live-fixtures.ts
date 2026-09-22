@@ -2,6 +2,7 @@ import {randomUUID} from "node:crypto";
 import {createClient} from "@supabase/supabase-js";
 import postgres from "postgres";
 import {expect,type Page} from "@playwright/test";
+import {runCleanup,type CleanupTask} from "../helpers/cleanup";
 export function liveFixtures(baseURL:string) {
   const {NEXT_PUBLIC_SUPABASE_URL:url,SUPABASE_SECRET_KEY:key,DATABASE_URL:database}=process.env;
   if(!url||!key||!database)throw new Error("Supabase test configuration required.");
@@ -27,8 +28,15 @@ export function liveFixtures(baseURL:string) {
       await expect(page.getByTestId("today-hero").getByRole("status")).toHaveCount(0,{timeout:30000});
     },
     async cleanup(){
-      for(const id of actors){const exists=await db.unsafe("select 1 from auth.users where id=$1",[id]);if(exists.length){const result=await admin.auth.admin.deleteUser(id);if(result.error)throw new Error("Synthetic family account cleanup failed.");}}
-      if(actors.length)await db.unsafe("delete from public.audit_log where actor_id=any($1::uuid[]) or target_user_id=any($2::uuid[])",[actors,subjects]);await db.end();
+      const tasks:CleanupTask[]=actors.map(id=>({label:`delete synthetic account ${id}`,run:async()=>{
+        const exists=await db.unsafe("select 1 from auth.users where id=$1",[id]);
+        if(!exists.length)return;
+        const result=await admin.auth.admin.deleteUser(id);
+        if(result.error)throw new Error(result.error.code||result.error.message);
+      }}));
+      if(actors.length)tasks.push({label:"delete synthetic audit rows",run:()=>db.unsafe("delete from public.audit_log where actor_id=any($1::uuid[]) or target_user_id=any($2::uuid[])",[actors,subjects])});
+      tasks.push({label:"close synthetic fixture database",run:()=>db.end()});
+      await runCleanup(tasks,"Synthetic family fixture cleanup failed.");
     },
   };
 }

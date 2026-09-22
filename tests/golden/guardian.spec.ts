@@ -3,6 +3,7 @@ import {writeFile} from "node:fs/promises";
 import {execFileSync} from "node:child_process";
 import {expect,test} from "@playwright/test";
 import {liveFixtures,noMobileOverflow} from "./live-fixtures";
+import {runCleanup} from "../helpers/cleanup";
 
 test("golden 7: guardian consent, separate dependent history and controlled-clock adult conversion",async({page,browser,baseURL},testInfo)=>{
   if(!baseURL)throw new Error("Base URL required.");
@@ -62,5 +63,12 @@ test("golden 7: guardian consent, separate dependent history and controlled-cloc
     for(const label of ["This is my health profile. I accept ownership.","Replace only my empty signup profile.","I consent to HMS storing and processing my health data.","I have read the health disclaimer."])await recipientPage.getByLabel(label,{exact:false}).check();
     await recipientPage.screenshot({path:testInfo.outputPath("adult-transfer-confirmations.png"),fullPage:true});await recipientPage.getByRole("button",{name:"Accept ownership",exact:true}).click();
     await expect(recipientPage).toHaveURL(baseURL+"/today?profile="+adultSubject);await expect(recipientPage.getByTestId("today-hero")).toBeVisible();expect((await page.goto("/today?profile="+adultSubject))?.status()).toBe(404);expect(f.errors).toEqual([]);
-  }finally{testInfo.setTimeout(testInfo.timeout+60000);await otherContext.close();await doctorContext.close();await f.cleanup();}
+  }finally{
+    testInfo.setTimeout(testInfo.timeout+60000);
+    await runCleanup([
+      {label:"close guardian recipient context",run:()=>otherContext.close()},
+      {label:"close guardian doctor context",run:()=>doctorContext.close()},
+      {label:"remove guardian fixtures",run:()=>f.cleanup()},
+    ],"Guardian golden-path cleanup failed.");
+  }
 });

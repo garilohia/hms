@@ -3,6 +3,7 @@ import {writeFile} from "node:fs/promises";
 import {createClient} from "@supabase/supabase-js";
 import postgres from "postgres";
 import {expect,test,type Page,type BrowserContext,type Route} from "@playwright/test";
+import {runCleanup,type CleanupTask} from "../helpers/cleanup";
 async function mobile(page:Page){expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBe(390);}
 async function loseFirstSavedResponse(page:Page,action:string) {
   let lost=false;
@@ -116,8 +117,11 @@ for(const path of [3,4])test(path===3?"golden 3: summary-only doctor, real PDF a
     }
     expect(errors).toEqual([]);
   }finally{
-    testInfo.setTimeout(testInfo.timeout+60000);await doctorContext?.close();
-    for(const actor of actors){const result=await admin.auth.admin.deleteUser(actor);if(result.error)throw new Error("Synthetic care actor cleanup failed.");}
-    if(actors.length)await db.unsafe("delete from public.audit_log where actor_id=any($1::uuid[]) or target_user_id=any($2::uuid[])",[actors,subjects]);await db.end();
+    testInfo.setTimeout(testInfo.timeout+60000);
+    const tasks:CleanupTask[]=[{label:"close doctor browser context",run:()=>doctorContext?.close()}];
+    for(const actor of actors)tasks.push({label:`delete synthetic care account ${actor}`,run:async()=>{const result=await admin.auth.admin.deleteUser(actor);if(result.error)throw new Error(result.error.code||result.error.message);}});
+    if(actors.length)tasks.push({label:"delete synthetic care audit rows",run:()=>db.unsafe("delete from public.audit_log where actor_id=any($1::uuid[]) or target_user_id=any($2::uuid[])",[actors,subjects])});
+    tasks.push({label:"close care test database",run:()=>db.end()});
+    await runCleanup(tasks,"Doctor golden-path cleanup failed.");
   }
 });

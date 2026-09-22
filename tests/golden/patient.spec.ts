@@ -5,6 +5,7 @@ import {join} from "node:path";
 import {createClient} from "@supabase/supabase-js";
 import postgres from "postgres";
 import {chromium,expect,test,type Page} from "@playwright/test";
+import {runCleanup,type CleanupTask} from "../helpers/cleanup";
 
 async function noOverflow(page:Page) { expect(await page.evaluate(()=>({viewport:innerWidth,width:document.documentElement.scrollWidth}))).toEqual({viewport:390,width:390}); }
 for(const persona of ["b","c"] as const) test(persona==="b"?"golden 1: onboard, sample insight, temperature phase chart and mobile PWA":"golden 2: attention acknowledgement leaves Today and remains in History",async({page,baseURL},testInfo)=>{
@@ -97,12 +98,23 @@ for(const persona of ["b","c"] as const) test(persona==="b"?"golden 1: onboard, 
       expect(worker.active).toBe("activated");expect(worker.cached).toBe(0);
       for(const size of [192,512]){const icon=await page.request.get("/app-icon/"+size);expect(icon.ok()).toBe(true);expect(icon.headers()["content-type"]).toContain("image/png");const bytes=await icon.body();expect(bytes.readUInt32BE(16)).toBe(size);expect(bytes.readUInt32BE(20)).toBe(size);}
       await writeFile(testInfo.outputPath("pwa.json"),JSON.stringify({browser:page.context().browser()?.version(),viewport:390,manifest:JSON.parse(manifest.data),installability,worker},null,2));await cdp.detach();
-      }finally{await installContext.close();await rm(profileDir,{recursive:true,force:true});}
+      }finally{
+        await runCleanup([
+          {label:"close PWA install context",run:()=>installContext.close()},
+          {label:"remove PWA browser profile",run:()=>rm(profileDir,{recursive:true,force:true})},
+        ],"PWA fixture cleanup failed.");
+      }
     }
     expect(errors).toEqual([]);
   }finally {
     testInfo.setTimeout(testInfo.timeout+60000);
     await writeFile(testInfo.outputPath("network.json"),JSON.stringify({errors,failures},null,2));
-    if(actor){const result=await admin.auth.admin.deleteUser(actor);if(result.error)throw new Error("Golden fixture cleanup failed.");await db.unsafe("delete from public.audit_log where actor_id=$1 or target_user_id=$2",[actor,subject??null]);}await db.end();
+    const tasks:CleanupTask[]=[];
+    if(actor){const actorId=actor;tasks.push(
+      {label:"delete patient golden account",run:async()=>{const result=await admin.auth.admin.deleteUser(actorId);if(result.error)throw new Error(result.error.code||result.error.message);}},
+      {label:"delete patient golden audit rows",run:()=>db.unsafe("delete from public.audit_log where actor_id=$1 or target_user_id=$2",[actorId,subject??null])},
+    );}
+    tasks.push({label:"close patient golden database",run:()=>db.end()});
+    await runCleanup(tasks,"Patient golden-path cleanup failed.");
   }
 });

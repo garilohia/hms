@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import postgres from "postgres";
 import { expect, test } from "@playwright/test";
+import { runCleanup, type CleanupTask } from "../helpers/cleanup";
 test("sample alerts, protected cron, acknowledgement, settings and Chrome notification worker", async ({ page, context, baseURL }) => {
   const { NEXT_PUBLIC_SUPABASE_URL: url, SUPABASE_SECRET_KEY: secret, DATABASE_URL: database, HMS_TEST_CRON_SECRET: cronSecret } = process.env;
   if (!url || !secret || !database || !cronSecret) throw new Error("Live alert verification requires supplied credentials and a test cron secret.");
@@ -66,10 +67,12 @@ test("sample alerts, protected cron, acknowledgement, settings and Chrome notifi
     const wrongOrigin = await page.request.post("/api/alerts/settings", { headers: { Origin: "https://untrusted.example" }, data: { userId: subject, action: "read" } });
     expect(wrongOrigin.status()).toBe(403);
   } finally {
-    if (actor) {
-      const cleanup = await admin.auth.admin.deleteUser(actor); if (cleanup.error) throw new Error("Alert fixture cleanup failed.");
-      await db.unsafe("delete from public.audit_log where actor_id=$1 or target_user_id=$2", [actor, subject || null]);
-    }
-    await db.end();
+    const tasks:CleanupTask[]=[];
+    if(actor){const actorId=actor;tasks.push(
+      {label:"delete alert test account",run:async()=>{const cleanup=await admin.auth.admin.deleteUser(actorId);if(cleanup.error)throw new Error(cleanup.error.code||cleanup.error.message);}},
+      {label:"delete alert test audit rows",run:()=>db.unsafe("delete from public.audit_log where actor_id=$1 or target_user_id=$2",[actorId,subject||null])},
+    );}
+    tasks.push({label:"close alert test database",run:()=>db.end()});
+    await runCleanup(tasks,"Alert verification cleanup failed.");
   }
 });

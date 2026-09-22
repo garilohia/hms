@@ -46,7 +46,7 @@ The complete import report is retained locally at `test-results/completion-inges
 - Current read-only table inventory: all 24 public tables have RLS. Of four private tables, integration connections and provider request budgets have forced RLS. Native batch receipts and push subscriptions lack RLS but deny SELECT to `anon` and `authenticated`; do not claim RLS on every private table.
 - The connected Production security advisor reports the same two OQ017 warnings and seven informational no-policy notices. See [managed extension guidance](https://supabase.com/docs/guides/database/database-linter?lint=0014_extension_in_public) and [password protection guidance](https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection). No extension/grant workaround or paid plan was attempted.
 - Existing live tests can invoke global dispatch, including through the immediate ingestion path. Empty outbound credentials prevent external sends, but stubbing can still consume unrelated pending deliveries. A momentary empty-queue preflight is not isolation. Do not run these suites against an environment receiving real patient work; complete the separate synthetic Preview first (OQ011).
-- Some older live-test/shared-fixture cleanup blocks stop after an initial cleanup error. No cleanup error occurred in this pass, but robust cleanup and isolated test dispatch remain test-harness limitations, not proof of production safety. The design-audit cleanup is hardened separately in this pass.
+- D047 closes the older teardown-order limitation: standalone Auth/alert/import checks, shared family fixtures and patient/doctor/guardian/Realtime golden paths now attempt every owned cleanup task and aggregate labelled failures. Fault-injection unit tests prove later cleanup still runs. This does not isolate shared global dispatch or make Production a safe regular test environment.
 
 ## Expanded visual audit
 
@@ -55,6 +55,10 @@ After a fresh `npm run build`, the outbound-empty `HMS_TEST_PORT=3112 caffeinate
 The selected Display radio originally exposed native browser blue outside the locked palette; the final light/dark capture shows `--accent`. Two new `history-advanced-overlays-*` captures require rendered overlay segments, three end labels and both overlay names in the chart text alternative. Manual review confirms Summary and Simple charts now show the top unit and both endpoint dates. The §13 route walk is in `DESIGN_AUDIT.md`.
 
 After the chart correction, the full outbound-empty `HMS_TEST_PORT=3112 caffeinate -i npm run golden:verify -- --max-failures=1 --output test-results/completion-followthrough-golden-2026-09-22` passed all eleven tests in 8.8 minutes. This re-proves all seven golden paths and the no-refresh Today/History/chat regression on the final local application; it is not hosted acceptance.
+
+## Fail-safe cleanup follow-through
+
+On 22 September, `npm run check` passed with 368 unit tests, including injected cleanup failures. Outbound-empty live suites then passed on the cleanup-hardened tests: Auth (two tests, 15.7 seconds), alerts (one test, 28.5 seconds), all eleven golden cases together (8.5 minutes), and both importer cases (8.5 minutes). The Apple run used 220,201,254 uncompressed bytes and 620,285 records; first/re-import durations were 255,142/220,554 ms, inserts were 6,000/0, and peak total renderer RSS was 249,511,936 bytes. The Google Fit/Google Health folder case also passed. A read-only Auth audit identified nine old HMS test-prefix accounts from 10–19 September; all were `@example.com`, named `Sample`, and owned zero Storage objects. Exactly those IDs and audit remnants were removed, after which every audited test prefix returned zero. These checks prove owned fixture teardown completes on the ordinary path and the unit test proves continuation under injected failure; they do not prove shared-environment isolation.
 
 ## Remaining evidence
 
