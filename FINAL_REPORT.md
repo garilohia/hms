@@ -1,12 +1,12 @@
-# HMS build handoff — updated 19 September 2026
+# HMS build handoff — updated 22 September 2026
 
 ## Status: M0–M8 implemented; external launch gates remain
 
 All nine original milestones are implemented. Subsequent work adds versioned native ingestion, bearer-token authentication, immutable retry receipts, measured latency/freshness, timezone re-bucketing, private Realtime recovery, fair resumable provider paging and shared provider request budgets. It does not claim signed native binaries, vendor approval, guaranteed wearable latency, a supervised pilot or clinical/legal approval.
 
-The current deployed application is `16652ad489d0e29e608090ba6259de2d5b23c87c`, verified in Mumbai (`bom1`) at deployment `dpl_8J3Nq59EKmCnLEQLC76c2uVaqaco`. Release-documentation commit `71dc2ad` records its deployment evidence; the later local chart/audit follow-through is not deployed. Both hosted quality/database jobs and all nine hosted public checks pass. Full signed-in hosted acceptance is **not green** (OQ016) and was not rerun on this release. See [the current release report](docs/verification/provider-budget-2026-09-19.md) and [fresh local completion checks](docs/verification/completion-matrix-2026-09-19.md).
+The latest application/runtime revision is `395c05e7b67c96dbc13d59d871fe57c6de0c6c97`, automatically deployed from `main` to Mumbai (`bom1`) as `dpl_35xhPMCxMCB6kijN87D5HKfiXXQi`. GitHub records that exact SHA's Production deployment as successful, and the public alias `https://hms-indol-psi.vercel.app` resolves to it. Both hosted quality/database jobs and all nine hosted public checks pass. The deployment returned no error-level or HTTP 500 logs in the checked post-release window, and scheduled minute responses at 08:42–08:49 UTC were HTTP 200 without timeout/error. Full signed-in hosted acceptance remains **not green** under OQ016 and was not repeatedly run against shared Production.
 
-The original large streaming-import and shorter verification matrix evidence remains below. The linked Vercel project and production site now exist at `https://hms-indol-psi.vercel.app`. The isolated Mumbai Preview database and separate public Supabase settings also exist, but Preview still lacks its server/database credentials, Storage, synthetic fixtures, Auth/origin setup and deployed acceptance. Staging must not silently use production health data.
+The original large streaming-import and shorter verification matrix evidence remains below. The isolated Mumbai Preview database and separate public Supabase settings exist, but Vercel's Preview scope still contains only the public Supabase URL/key and consent salt. It lacks the Preview server/database credentials, Storage, synthetic fixtures, Auth/origin setup and deployed acceptance. Staging must not silently use production health data.
 
 The 18 September Realtime follow-up passed `npm run check` (136 unit tests), `npm run build` (55 routes) and all five patient/doctor/Realtime golden tests. Live History updates preserve the selected page and reading, and chat recovers messages sent during browser network interruption. These checks used a local production build against the real Supabase project with synthetic fixtures; they do not establish the currently deployed commit. See PROGRESS.md for the earlier full verification matrix and this follow-up's exact commands.
 
@@ -41,6 +41,14 @@ Earlier runtime `ea36c7c` prevented clinical-summary clicks before hydration and
 The requested whole-repository `codex review` completed and reported no actionable findings. Independent regression work found the issues above; that review result is not a correctness guarantee. Details are in `docs/verification/m8-review.md`.
 
 ## Verification evidence
+
+### Latest production follow-through — 22 September 2026
+
+- Production deployment `dpl_35xhPMCxMCB6kijN87D5HKfiXXQi` is Ready in `bom1` for exact Git SHA `395c05e7b67c96dbc13d59d871fe57c6de0c6c97`; GitHub's Production deployment status is successful and the public alias points to it.
+- Hosted Actions run `35706416424` passes the complete quality and from-scratch database jobs using `actions/checkout@v7` and `actions/setup-node@v7`. The old Node 20 action-runtime warning is gone.
+- `HMS_DEPLOYMENT_URL=https://hms-indol-psi.vercel.app npx playwright test --config playwright.deployed.config.ts` passes all nine public/boundary tests in 15.9 seconds. The immutable deployment URL itself is Vercel-SSO protected, so public verification correctly uses the alias that points to the same deployment.
+- Runtime-log scans for error level and HTTP 500 returned no entries in the checked post-release window. Eight minute-dispatch responses from 08:42 through 08:49 UTC returned 200 with `timed_out=false` and no error. Read-only queue counts were zero actionable deliveries, zero provider connections and zero pending summary jobs.
+- Production has notification/encryption/database/cron variable names configured. Provider OAuth client variables are absent, and Preview still lacks server/database variables. Configuration presence is not real inbox, device, provider or capacity acceptance.
 
 ### Current release — 19 September 2026
 

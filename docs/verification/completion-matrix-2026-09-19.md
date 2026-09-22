@@ -2,7 +2,7 @@
 
 ## Scope and release identity
 
-This is the follow-through for requested engineering items 3–8: Realtime and its regression, deployed migrations, the verification matrix, current handoff documentation and hosted smoke checks. The deployed application remains `16652ad489d0e29e608090ba6259de2d5b23c87c`; the starting documentation revision was `71dc2ad`. This pass changes test coverage, documentation and shared chart presentation: native radios use the interaction token, compact charts retain required axes, Advanced overlays use the shared baseline boundary language, and alert-notch hit targets meet the accessibility floor. It does not change data models, routes, clinical rules, metric values or deployment settings.
+This is the follow-through for requested engineering items 3–8: Realtime and its regression, deployed migrations, the verification matrix, current handoff documentation and hosted smoke checks. Its original deployed baseline was `16652ad489d0e29e608090ba6259de2d5b23c87c`; Vercel's Git integration subsequently deployed the final application/runtime revision `395c05e7b67c96dbc13d59d871fe57c6de0c6c97` to Production. This pass changes test coverage, documentation and shared chart presentation: native radios use the interaction token, compact charts retain required axes, Advanced overlays use the shared baseline boundary language, and alert-notch hit targets meet the accessibility floor. It does not change data models, routes, clinical rules or metric values.
 
 Realtime, migration and release evidence is in [the shared-budget report](provider-budget-2026-09-19.md). Both databases have 43 migrations through 0042. The hosted public suite passes; full signed-in hosted acceptance remains **not green** under OQ016. No further Production retry was made to obscure that failure.
 
@@ -63,3 +63,7 @@ On 22 September, `npm run check` passed with 368 unit tests, including injected 
 ## Remaining evidence
 
 Existing latest-release hosted public evidence remains in the linked release report; it is not represented as a new full hosted pass here. Preview owner access/credentials, real provider consent/approval, sender/domain and physical-device delivery, security review and legal/clinical approval remain external gates. No third-party provider account, terms acceptance, purchase or real message was created by this pass.
+
+### Production follow-through — 22 September
+
+GitHub records exact SHA `395c05e7b67c96dbc13d59d871fe57c6de0c6c97` as a successful Production deployment at `dpl_35xhPMCxMCB6kijN87D5HKfiXXQi`; the public alias resolves to it in Mumbai. All nine public/boundary tests pass against the alias in 15.9 seconds. Error-level and HTTP 500 deployment-log scans returned no entries in the checked post-release window. Minute-dispatch responses at 08:42–08:49 UTC were all HTTP 200 without timeout/error, with zero actionable deliveries, zero provider connections and zero pending summaries at the read-only check. Full signed-in acceptance remains gated on isolated Preview.
