@@ -32,6 +32,7 @@
 - Resolved 14 September 2026. The checkout has `origin` → `https://github.com/garilohia/hms.git`, and hosted GitHub Actions runs are visible.
 - The failures beginning with migration 0024 came from replaying Supabase Realtime migrations in a stock `postgres:17` service without the provider-owned `realtime` schema. `scripts/bootstrap-test-db.sql` now supplies a minimal CI-only `realtime.messages`, `realtime.topic()` and inert `realtime.send()` fixture, matching the existing Auth and Storage fixtures without pretending to test websocket delivery.
 - Hosted run [34883833639](https://github.com/garilohia/hms/actions/runs/34883833639) passed both `quality` and `database` for commit `a0f1803`. Realtime websocket delivery was subsequently verified separately under OQ015.
+- Latest application `16652ad` also passed both jobs in [run 35440701188](https://github.com/garilohia/hms/actions/runs/35440701188); its release-documentation commit `71dc2ad` passed [run 35440910242](https://github.com/garilohia/hms/actions/runs/35440910242). This resolves hosted CI, not OQ016's separate signed-in reliability gate.
 
 ## OQ003 — Launch email delivery and redirect configuration
 
@@ -47,6 +48,7 @@
 - Web Push subscription storage, recipient rechecks and transport are implemented, but production delivery still needs a physical-device test using the configured VAPID pair. SMS and WhatsApp remain stubs.
 - Read-only configuration and controlled acceptance steps are in `docs/NOTIFICATION_ACCEPTANCE.md`. `npm run notifications:verify` and the authenticated deployed diagnostic distinguish configuration from actual receipt; neither sends a notification.
 - On 19 September the deployed diagnostic verified matching VAPID keys and a valid contact, and accepted the Resend key's syntax only. The email sender check failed; the available Production sender configuration is still Resend's test sender. Set `EMAIL_FROM` to an address on the owner's verified sending domain before controlled email acceptance. No sender identity was invented and no test email/push was sent.
+- The current release's minute-dispatch HTTP response was 200 at 11:42 UTC on 19 September. Fresh local alert/auth checks also pass with real outbound transports disabled; neither is evidence of inbox or physical-device receipt. See `docs/verification/completion-matrix-2026-09-19.md` for the local test conditions.
 
 ## OQ005 — History timezone changes after import
 
@@ -83,6 +85,7 @@
 - A separate free Mumbai project, `hms-preview` (`eqrlycvveqfypalipssq`), was created in the existing garilohia organisation with founder approval after a $0/month quote. All 43 migrations (through 0042) and 25 public device catalogue rows are installed; every public table has RLS and no patient records were copied.
 - Preview has its own public Supabase URL/key and consent salt, with no production database/server credentials. Still needed: staging server key and database credentials, private Storage setup, synthetic persona/doctor seeding, Auth redirect/Preview origin configuration, deployment and deployed tests. The connected tool exposes only publishable keys; the dashboard browser is awaiting founder sign-in. Preview is not yet operational.
 - Follow-up: the founder signed in, but that browser account shows a different organisation and Supabase explicitly denies access to `eqrlycvveqfypalipssq`. Switch to the existing account with garilohia organisation access. Do not create another project/account or substitute the unrelated organisation.
+- Test isolation is also a gate: some existing live checks can dispatch globally, including after ingestion. Blank email/push credentials prevent sends but can mark unrelated pending deliveries stubbed. An empty-queue preflight is only a point-in-time precaution. Do not run these suites alongside real patient work; complete synthetic Preview and harden shared cleanup before regular acceptance runs.
 
 ## OQ012 — Production wearable-provider access
 

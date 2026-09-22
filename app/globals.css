@@ -194,7 +194,8 @@ button:not(:disabled), select { cursor: pointer; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 button:disabled { opacity: .5; cursor: wait; }
 input:not([type=checkbox]):not([type=radio]), select, textarea { background: var(--surface); color: var(--ink); border: 1px solid var(--rule); border-radius: var(--radius-input); padding: .7rem; min-height: 44px; }
-input[type=checkbox] { width: 1.2rem; height: 1.2rem; border-radius: 6px; accent-color: var(--accent); flex-shrink: 0; }
+input[type=checkbox], input[type=radio] { accent-color: var(--accent); }
+input[type=checkbox] { width: 1.2rem; height: 1.2rem; border-radius: 6px; flex-shrink: 0; }
 input[type=date], input[type=file] { min-width: 0; width: 100%; }
 
 /* Density (DESIGN.md §9). One system, three densities. */
@@ -324,8 +325,10 @@ progress { accent-color: var(--accent); }
 .data-chart .chart-line-inside { fill: none; stroke: var(--data); stroke-width: 1.5; stroke-linejoin: round; stroke-linecap: butt; }
 .data-chart .chart-line-outside { fill: none; stroke: var(--ink); stroke-width: 2; stroke-linejoin: round; stroke-linecap: butt; }
 .data-chart .chart-end { fill: var(--ink); }
-/* Advanced overlays: same --data ink, told apart by weight and dash, never by a new colour. */
-.data-chart .chart-overlay { fill: none; stroke: var(--data); stroke-linejoin: round; opacity: .9; }
+/* Advanced overlays keep the same boundary split, then add weight and dash without another colour. */
+.data-chart .chart-overlay { fill: none; stroke-linejoin: round; opacity: .9; }
+.data-chart .chart-overlay-inside { stroke: var(--data); }
+.data-chart .chart-overlay-outside { stroke: var(--ink); }
 .data-chart .chart-overlay-1 { stroke-width: 1; stroke-dasharray: 4 3; }
 .data-chart .chart-overlay-2 { stroke-width: 1; stroke-dasharray: 1.5 2.5; }
 .data-chart .chart-overlay-3 { stroke-width: 2.5; opacity: .45; }

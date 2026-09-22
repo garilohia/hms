@@ -342,3 +342,15 @@ The request wrapper retains its validated URL clone across awaited budget/author
 ## D044 — Stop failed hosted acceptance without interrupting another fixture
 
 Deployed Playwright runs use one worker, no retries and `maxFailures: 1`. After a failed case and its cleanup, remaining cases are reported as not run; they are never represented as passed or disabled. This prevents an operator stop from interrupting a newly started synthetic-account fixture. Caregiver diagnostics retain bounded, redacted route/phase/page labels and request lifecycle timings before context closure. No query strings, credentials, bodies or profile identifiers enter the timing attachment. Diagnostic-write failure cannot prevent cleanup. Original deadlines and substantive assertions stay unchanged.
+
+## D045 — Make design-audit coverage and fixtures explicit
+
+The visual verification harness must create and address its own labelled synthetic doctor; selecting the first existing directory entry can contact an unrelated practitioner. Require the consultation capture instead of treating its absence as an optional note. Capture Display settings and the verified doctor's patient/consultation queue, shared summary and consultation, in addition to the existing registration screen. Assert successful page responses, intended routes and mobile widths. These strengthen test coverage; no design-system assertion, application copy, clinical rule or deadline is relaxed.
+
+Replace the old screenshot manifest with a running record before fixtures are created, then record complete/failed status and actual coverage even when capture or cleanup fails. Close anonymous/scheme contexts and retain onboarding cleanup errors rather than silently calling the run successful. Screenshots not listed in the new manifest are not evidence from that run. Existing broader live-test isolation/cleanup limitations remain documented; a synthetic fixture and blank notification credentials do not make a shared Production queue an isolated test environment.
+
+The browser's native selected-radio blue was also outside DESIGN.md §4.2. Radios now use `--accent`, matching the existing checkbox and progress controls. This is a token correction only; selection behaviour and copy are unchanged.
+
+## D046 — Keep the full chart language in compact and overlay states
+
+DESIGN.md §5 applies to every chart and §9 says its language is identical across densities. Compact Summary/Simple charts therefore retain the single top unit label and both endpoint dates instead of treating “sparkline” as permission to omit them. Advanced overlays use the same per-metric baseline split as the primary line, retain dash/weight distinctions, expose one end value per series and include every series in the chart's text alternative. Alert notches retain their 2px visible mark but receive a transparent 44px interaction target. No metric, range, analytics formula or alert state changed.

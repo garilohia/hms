@@ -1,5 +1,8 @@
 {
-  "captured_at": "2026-09-17T19:45:13.412Z",
+  "started_at": "2026-09-22T07:32:36.882Z",
+  "captured_at": "2026-09-22T07:42:30.439Z",
+  "state": "complete",
+  "complete": true,
   "viewport_width": 390,
   "shots": [
     {
@@ -199,6 +202,13 @@
       "status": 200
     },
     {
+      "name": "more-display",
+      "scheme": "light",
+      "route": "/more/display",
+      "scrollWidth": 390,
+      "status": 200
+    },
+    {
       "name": "more-advanced",
       "scheme": "light",
       "route": "/more/advanced",
@@ -229,7 +239,7 @@
     {
       "name": "summary",
       "scheme": "light",
-      "route": "/summary?profile=bfce4341-83b1-4187-84de-04e3f90f1ab0",
+      "route": "/summary?profile=059f38ee-3066-4d42-b521-d196d8735474",
       "scrollWidth": 390,
       "status": 200
     },
@@ -243,7 +253,7 @@
     {
       "name": "consult",
       "scheme": "light",
-      "route": "/consults/16b0fd68-e841-43b7-8d91-9cabff8fd86f",
+      "route": "/consults/be2f728d-2181-4221-b8d9-407200b8089b",
       "scrollWidth": 390,
       "status": 200
     },
@@ -332,6 +342,13 @@
       "status": 200
     },
     {
+      "name": "more-display",
+      "scheme": "dark",
+      "route": "/more/display",
+      "scrollWidth": 390,
+      "status": 200
+    },
+    {
       "name": "more-advanced",
       "scheme": "dark",
       "route": "/more/advanced",
@@ -362,7 +379,7 @@
     {
       "name": "summary",
       "scheme": "dark",
-      "route": "/summary?profile=bfce4341-83b1-4187-84de-04e3f90f1ab0",
+      "route": "/summary?profile=059f38ee-3066-4d42-b521-d196d8735474",
       "scrollWidth": 390,
       "status": 200
     },
@@ -376,7 +393,7 @@
     {
       "name": "consult",
       "scheme": "dark",
-      "route": "/consults/16b0fd68-e841-43b7-8d91-9cabff8fd86f",
+      "route": "/consults/be2f728d-2181-4221-b8d9-407200b8089b",
       "scrollWidth": 390,
       "status": 200
     },
@@ -437,6 +454,13 @@
       "status": 200
     },
     {
+      "name": "history-advanced-overlays",
+      "scheme": "light",
+      "route": "/history (Advanced overlays)",
+      "scrollWidth": 390,
+      "status": 200
+    },
+    {
       "name": "today-advanced",
       "scheme": "dark",
       "route": "/today",
@@ -447,6 +471,13 @@
       "name": "history-advanced",
       "scheme": "dark",
       "route": "/history",
+      "scrollWidth": 390,
+      "status": 200
+    },
+    {
+      "name": "history-advanced-overlays",
+      "scheme": "dark",
+      "route": "/history (Advanced overlays)",
       "scrollWidth": 390,
       "status": 200
     },
@@ -474,14 +505,14 @@
     {
       "name": "caregiver-today",
       "scheme": "light",
-      "route": "/today?profile=bfce4341-83b1-4187-84de-04e3f90f1ab0",
+      "route": "/today?profile=059f38ee-3066-4d42-b521-d196d8735474",
       "scrollWidth": 390,
       "status": 200
     },
     {
       "name": "caregiver-alerts",
       "scheme": "light",
-      "route": "/doctor/alerts?profile=bfce4341-83b1-4187-84de-04e3f90f1ab0",
+      "route": "/doctor/alerts?profile=059f38ee-3066-4d42-b521-d196d8735474",
       "scrollWidth": 390,
       "status": 200
     },
@@ -495,14 +526,14 @@
     {
       "name": "caregiver-today",
       "scheme": "dark",
-      "route": "/today?profile=bfce4341-83b1-4187-84de-04e3f90f1ab0",
+      "route": "/today?profile=059f38ee-3066-4d42-b521-d196d8735474",
       "scrollWidth": 390,
       "status": 200
     },
     {
       "name": "caregiver-alerts",
       "scheme": "dark",
-      "route": "/doctor/alerts?profile=bfce4341-83b1-4187-84de-04e3f90f1ab0",
+      "route": "/doctor/alerts?profile=059f38ee-3066-4d42-b521-d196d8735474",
       "scrollWidth": 390,
       "status": 200
     },
@@ -510,6 +541,48 @@
       "name": "caregiver-family",
       "scheme": "dark",
       "route": "/more/family",
+      "scrollWidth": 390,
+      "status": 200
+    },
+    {
+      "name": "doctor-verified",
+      "scheme": "light",
+      "route": "/doctor",
+      "scrollWidth": 390,
+      "status": 200
+    },
+    {
+      "name": "doctor-summary",
+      "scheme": "light",
+      "route": "/summary?profile=059f38ee-3066-4d42-b521-d196d8735474",
+      "scrollWidth": 390,
+      "status": 200
+    },
+    {
+      "name": "doctor-consult",
+      "scheme": "light",
+      "route": "/consults/be2f728d-2181-4221-b8d9-407200b8089b",
+      "scrollWidth": 390,
+      "status": 200
+    },
+    {
+      "name": "doctor-verified",
+      "scheme": "dark",
+      "route": "/doctor",
+      "scrollWidth": 390,
+      "status": 200
+    },
+    {
+      "name": "doctor-summary",
+      "scheme": "dark",
+      "route": "/summary?profile=059f38ee-3066-4d42-b521-d196d8735474",
+      "scrollWidth": 390,
+      "status": 200
+    },
+    {
+      "name": "doctor-consult",
+      "scheme": "dark",
+      "route": "/consults/be2f728d-2181-4221-b8d9-407200b8089b",
       "scrollWidth": 390,
       "status": 200
     },
@@ -543,5 +616,6 @@
     }
   ],
   "pageErrors": [],
-  "notes": []
+  "notes": [],
+  "failure_count": 0
 }

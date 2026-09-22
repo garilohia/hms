@@ -5,7 +5,7 @@ import { buildSeries, describeSeries, formatDay, formatValue, type ChartKind, ty
 
 export type ChartMarker = { day: string; count: number; acknowledged: boolean };
 export type ChartPhase = { day: string; phase: string; confidence: string };
-export type ChartOverlay = { label: string; values: DayValue[] };
+export type ChartOverlay = { label: string; unit: string; values: DayValue[]; baseline?: DayValue[] };
 export const overlayStyles = ["chart-overlay-1", "chart-overlay-2", "chart-overlay-3"] as const;
 export const cyclePhases = ["menstrual", "follicular", "ovulatory", "luteal"] as const;
 
@@ -42,10 +42,10 @@ export function DataChart({ values, baseline, kind, label, unit, height = 160, a
   // §8: the line draws once on first paint, then everything responds to actions only.
   useEffect(() => { if (!animate) return; const timer = setTimeout(() => setDrawing(false), 600); return () => clearTimeout(timer); }, [animate]);
   const compact = sparkline;
-  const series = buildSeries(values, { kind, baseline, layout: { width, height, top: compact ? 4 : 14, bottom: compact ? 4 : 14, left: 4, right: compact ? 34 : 44 } });
-  const layout = { width, height, top: compact ? 4 : 14, bottom: compact ? 4 : 14, left: 4, right: compact ? 34 : 44 };
-  const overlaySeries = overlays.slice(0, 3).map(o => buildSeries(o.values, { kind: "line", layout }));
-  const sentence = describeSeries(label, unit, series) + (overlays.length ? " Overlaid on its own scale: " + overlays.slice(0, 3).map(o => o.label).join(", ") + "." : "");
+  const layout = { width, height, top: 14, bottom: compact ? 4 : 14, left: 4, right: compact ? 34 : 44 };
+  const series = buildSeries(values, { kind, baseline, layout });
+  const overlaySeries = overlays.slice(0, 3).map(o => ({...o,series:buildSeries(o.values, { kind: "line", baseline:o.baseline, layout })}));
+  const sentence = describeSeries(label, unit, series) + overlaySeries.map(o => " " + describeSeries(o.label, o.unit, o.series)).join("");
   const draw = drawing ? " chart-draw" : "";
   function pick(event: PointerEvent<SVGSVGElement>) {
     if (!onPick || (event.target as Element).closest("[data-testid=alert-marker]")) return;
@@ -60,7 +60,7 @@ export function DataChart({ values, baseline, kind, label, unit, height = 160, a
       {phases && <PhasePatterns id={id} />}
       {phases?.filter(c => cyclePhases.includes(c.phase as typeof cyclePhases[number])).map(c => <rect key={c.day} data-testid="cycle-phase" x={series.x(c.day) - Math.max(1.5, (width - 48) / Math.max(1, series.points.length) / 2)} y={series.layout.top} width={Math.max(3, (width - 48) / Math.max(1, series.points.length))} height={plotHeight} fill={`url(#${id}-${c.phase})`}><title>{c.day + ": " + c.phase + " estimate (" + c.confidence + ")"}</title></rect>)}
       {(compact ? [series.gridValues[2]] : series.gridValues).map((value, i) => <line key={i} className="chart-grid" x1={series.layout.left} x2={width - series.layout.right} y1={series.y(value)} y2={series.y(value)} />)}
-      {!compact && series.last && <text x={series.layout.left} y={series.layout.top - 4}>{formatValue(series.high)} {unit}</text>}
+      {series.last && <text x={series.layout.left} y={series.layout.top - 4}>{formatValue(series.high)} {unit}</text>}
       {series.bandPaths.map((d, i) => <path key={"band" + i} className={"chart-band" + (series.building ? " building" : "")} d={d} />)}
       {kind === "bars"
         ? series.bars.map(bar => <rect key={bar.day} className={"chart-bar" + (bar.latest ? " latest" : "")} x={bar.x} y={bar.y} width={bar.width} height={bar.height} />)
@@ -68,16 +68,21 @@ export function DataChart({ values, baseline, kind, label, unit, height = 160, a
           {series.inside.map((d, i) => <path key={"in" + i} className={"chart-line-inside" + draw} pathLength={1} d={d} />)}
           {series.outside.map((d, i) => <path key={"out" + i} className={"chart-line-outside" + draw} pathLength={1} d={d} />)}
         </>}
-      {overlaySeries.map((o, i) => o.segments.map((d, j) => <path key={"ov" + i + "-" + j} className={"chart-overlay " + overlayStyles[i]} d={d} />))}
+      {overlaySeries.map((overlay, i) => <g key={"overlay-" + i}>
+        {overlay.series.inside.map((d, j) => <path key={"in-" + j} className={"chart-overlay chart-overlay-inside " + overlayStyles[i]} d={d} />)}
+        {overlay.series.outside.map((d, j) => <path key={"out-" + j} className={"chart-overlay chart-overlay-outside " + overlayStyles[i]} d={d} />)}
+        {overlay.series.last&&overlay.series.last.y!==null&&overlay.series.lastOutside&&<circle className="chart-end" cx={overlay.series.last.x} cy={overlay.series.last.y} r={2.2}/>}
+        {overlay.series.last&&overlay.series.last.y!==null&&<text className="chart-value" x={overlay.series.last.x+5} y={overlay.series.last.y+4}>{formatValue(overlay.series.last.value!)}</text>}
+      </g>)}
       {series.last && series.lastOutside && kind !== "bars" && <circle className="chart-end" cx={series.last.x} cy={series.last.y!} r={2.2} />}
       {series.last && <text className="chart-value" x={series.last.x + (kind === "bars" ? series.bars.at(-1)!.width / 2 + 4 : 5)} y={series.last.y! + 4}>{formatValue(series.last.value!)}</text>}
       {markers.map(m => <g key={m.day} data-testid="alert-marker" data-acknowledged={m.acknowledged} role="button" tabIndex={0} aria-label={"Alerts " + m.day + (m.acknowledged ? ", acknowledged" : "")} onClick={() => onMarker?.(m.day)} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onMarker?.(m.day); } }}>
-        <rect x={series.x(m.day) - 8} y={series.axisY - 6} width={16} height={20} fill="transparent" />
+        <rect x={series.x(m.day) - 22} y={series.axisY - 22} width={44} height={44} fill="transparent" />
         <line className="chart-notch" x1={series.x(m.day)} x2={series.x(m.day)} y1={series.axisY - 1} y2={series.axisY + 7} />
         <title>{m.count + " unusual readings on " + m.day + (m.acknowledged ? ", acknowledged" : "")}</title>
       </g>)}
     </svg>
-    {!compact && series.firstDay && <div className="chart-axis"><span>{formatDay(series.firstDay)}</span><span>{series.lastDay && series.lastDay !== series.firstDay ? formatDay(series.lastDay) : ""}</span></div>}
+    {series.firstDay && <div className="chart-axis"><span>{formatDay(series.firstDay)}</span><span>{series.lastDay && series.lastDay !== series.firstDay ? formatDay(series.lastDay) : ""}</span></div>}
     {series.building && series.last && <div className="chart-building"><span>Building your baseline</span><b>{series.baselineDays} of {BASELINE_WINDOW_DAYS} days</b></div>}
   </div>;
 }

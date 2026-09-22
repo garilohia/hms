@@ -100,7 +100,7 @@ export function History({initial,today}:{initial:PatientView;today:string}) {
         <DataChart values={summaryValues(rows,metric)} baseline={summaryValues(currentBaselineRows,metric)} kind={config.kind} label={config.label} unit={config.unit} animate
           markers={(view.markers??[]).filter(m=>rows.some(r=>r.day===m.day))} onMarker={day=>void showAlerts(day)} onPick={day=>setSelected(rows.find(r=>r.day===day)??null)}
           phases={showPhases?(view.cycles??[]).filter(c=>rows.some(r=>r.day===c.day)):undefined}
-          overlays={mode==="advanced"?overlays.map(key=>({label:chartMetrics[key].label,values:summaryValues(rows,key)})):undefined}/>
+          overlays={mode==="advanced"?overlays.map(key=>({label:chartMetrics[key].label,unit:chartMetrics[key].unit,values:summaryValues(rows,key),baseline:summaryValues(currentBaselineRows,key)})):undefined}/>
         {mode==="advanced"&&overlays.length>0&&<p className="muted">Overlaid on their own scales: {overlays.map((key,i)=>chartMetrics[key].label+(i===0?" (dashed)":i===1?" (dotted)":" (wide, faint)")).join(", ")}.</p>}
         {advancedSeries&&<div className="panel stack"><p className="type-label">Baseline</p>
           {advancedSeries.lastBand?<p>Usual range {formatValue(advancedSeries.lastBand.low)} to {formatValue(advancedSeries.lastBand.high)} {config.unit}, from {advancedSeries.baselineDays} of {BASELINE_WINDOW_DAYS} days. Latest {formatValue(advancedSeries.last!.value!)} {config.unit}, {advancedSeries.lastOutside?"outside":"inside"} the range.</p>:<p>Fewer than seven days in the last {BASELINE_WINDOW_DAYS}, so no range is computed yet.</p>}
