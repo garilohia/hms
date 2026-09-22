@@ -219,5 +219,5 @@
 ## M8 maintenance — GitHub Actions Node 24 runtime — 22 September 2026
 
 - Built: updated both jobs from `actions/checkout@v4` and `actions/setup-node@v4` to their current v7 majors. The workflow still selects Node 24 and uses explicit npm caching; no application, database or release behaviour changed.
-- Verified: the preceding `61a1c51` push passed both hosted jobs but emitted GitHub's Node 20 action-runtime deprecation. The v7 migration follows the official action documentation and will be accepted only after both hosted jobs pass on this exact workflow revision.
+- Verified: the preceding `61a1c51` push passed both hosted jobs but emitted GitHub's Node 20 action-runtime deprecation. On the v7 migration commit, hosted run `35706160194` passed the complete quality job (install, lint, strict typecheck, 368 unit tests, build and public Playwright) and the from-scratch database job. Both checkout/setup steps ran on v7 and the Node 20 action-runtime warning is absent. `npm audit --omit=dev` reports zero production vulnerabilities; the tracked environment-file scan contains only `.env.example`.
 - Cut/blocked: the separate Ubuntu runner-image migration notice is controlled by GitHub and requires no repository change today.
